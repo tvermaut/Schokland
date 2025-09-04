@@ -14,7 +14,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     // Voer de Overpass API query uit en toon op een Leaflet kaart
-    fetch("https://overpass.huc.knaw.nl/?q=LyoKVGhpcyBoYcSGYmVlbiBnxI1lcmF0ZWQgYnkgdGhlIG92xJJwxIlzLXR1cmJvIHdpemFyZC7EgsSdxJ9yaWdpbmFsIHNlxLBjaMSsxIk6CsOiwoDCnCJrYWQ6xJBtxIxuxJUiPSJTxYJva2xhbmQixYjCnQoqLwpbb3V0Ompzb25dOwovL8SPxJTEnXIgcmVzdWx0cwp3clsnxYzFjsWQxZLElSc9J8WYaMWaxZzFnifFsMWyxbRwxLfFk8W5xbvFvcW_CsWodMSPZW9tOw&out=json")
+    fetch("https://overpass.huc.knaw.nl/api/interpreter?data=%5Bout%3Ajson%5D%3B%0Awr%5B%27kad%3Agemeente%27%3D%27Schokland%27%5D%3B%0Aout%20geom%3B")
       .then(response => response.json())
       .then(data => {
         // Maak de kaart aan
