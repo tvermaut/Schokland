@@ -13,8 +13,8 @@
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // Voer de Overpass API query uit en toon op een Leaflet kaart
-    fetch("https://overpass.huc.knaw.nl/api/interpreter?data=%5Bout%3Ajson%5D%3B%0Awr%5B%27kad%3Agemeente%27%3D%27Schokland%27%5D%3B%0Aout%20geom%3B")
+    // https://overpass.huc.knaw.nl/api/interpreter?data=%5Bout%3Ajson%5D%3B%0Awr%5B%27kad%3Agemeente%27%3D%27Schokland%27%5D%3B%0Aout%20geom%3B
+    fetch("overpass.geojson")
       .then(response => response.json())
       .then(data => {
         // Maak de kaart aan
