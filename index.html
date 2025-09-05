@@ -149,13 +149,13 @@ function definitionListFromFirstResult(x) {
   if (!perceel) return '';
   let dl = '<dl class="details">';
   dl += `<dt>Artikel</dt><dd>${getArtikelHTML(x.artikelen[0])}</dd>`;
-  dl += `<dt>Soort</dt><dd>${perceel.Perceel?.grondGebruik || ''}</dd>`;
-  if (perceel.Perceel?.huisnrs && perceel.Perceel.huisnrs.length > 0) {
-    dl += `<dt>Huisnr</dt><dd>${perceel.Perceel.huisnrs.join(', ')}</dd>`;
+  dl += `<dt>Soort</dt><dd>${perceel?.grondGebruik || ''}</dd>`;
+  if (perceel?.huisnrs && perceel?.huisnrs.length > 0) {
+    dl += `<dt>Huisnr</dt><dd>${perceel.huisnrs.join(', ')}</dd>`;
   }
-  dl += `<dt>Oppervlakte</dt><dd>${perceel.Perceel?.oppervlak || ''}</dd>`;
-  if (perceel.Perceel?.oatScan?.code) {
-    let url = 'https://tvermaut.github.io/hisgis-oat-scan-view/?' + perceel.Perceel.oatScan.code;
+  dl += `<dt>Oppervlakte</dt><dd>${perceel?.oppervlak || ''}</dd>`;
+  if (perceel?.oatScan?.code) {
+    let url = 'https://tvermaut.github.io/hisgis-oat-scan-view/?' + perceel?.oatScan.code;
     dl += `<dt>OAT-scan</dt><dd><a class="oat-scan-btn" href="${url}" target="_blank" rel="noopener">Bekijk OAT-scan</a></dd>`;
   }
   dl += '</dl>';

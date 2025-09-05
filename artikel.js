@@ -5,7 +5,7 @@ function getArtikelHTML(a){
 
     let rphs = a.rechtsPersonen.map(x => verwerkRechtspersoon(x));
     let rph = rphs.join(' en ');
-    return anr + rph
+    return anr + ': ' + rph
 }
 
 function verwerkRechtspersoon(rp){
