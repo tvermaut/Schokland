@@ -164,46 +164,6 @@ const forestIcon = L.divIcon({
   iconSize: [20, 20],
   interactive: false
 });
-const map = L.map('map', {
-  center: [52.65, 5.78],
-  zoom: 14,
-  minZoom: 2,
-  maxZoom: 22,
-  layers: [
-    L.tileLayer.wms(
-      "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
-      layers: 'Actueel_ortho25',
-      format: 'image/jpeg',
-      tilematrixSet: 'EPSG:3857',
-      transparent: false,
-      maxZoom: 22,
-      attribution: 'Luchtfoto via PDOK'
-    })
-  ]
-});
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxNativeZoom: 19,
-  maxZoom: 22,
-  attribution: '&copy; OpenStreetMap-bijdragers'
-});
-const luchtfoto = L.tileLayer.wms(
-  "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
-    layers: 'Actueel_ortho25',
-    format: 'image/jpeg',
-    tilematrixSet: 'EPSG:3857',
-    transparent: false,
-    maxZoom: 22,
-    attribution: 'Luchtfoto via PDOK'
-});
-const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
-  maxZoom: 22,
-  attribution: 'Minuutplan 1832 via Huygens ING'
-});
-const baseLayers = {
-  "OSM": osm,
-  "PDOK Luchtfoto": luchtfoto,
-  "Minuutplan 1832": minuutplan
-};
 L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
 fetch('overpass.geojson')
   .then(resp => resp.json())
