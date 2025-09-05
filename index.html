@@ -30,15 +30,22 @@
     table.tags th {
       background: #edecfe;
     }
+    .forest-icon {
+      width: 20px; height: 20px;
+      background: url('https://cdn-icons-png.flaticon.com/512/4205/4205032.png') no-repeat center center;
+      background-size: contain;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// --- Baselayers --- 
+// --- Basislagen ---
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 24,
+  maxNativeZoom: 19,
+  maxZoom: 22,
   attribution: '&copy; OpenStreetMap-bijdragers'
 });
 const luchtfoto = L.tileLayer.wms(
@@ -47,22 +54,23 @@ const luchtfoto = L.tileLayer.wms(
     format: 'image/jpeg',
     tilematrixSet: 'EPSG:3857',
     transparent: false,
-    maxZoom: 24,
+    maxZoom: 22,
     attribution: 'Luchtfoto via PDOK'
 });
 const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
-  maxZoom: 24,
+  maxZoom: 22,
   attribution: 'Minuutplan 1832 via Huygens ING'
 });
 
-// --- Kaartinit, LayerSwitcher ---
+// --- Kaart ---
 const map = L.map('map', {
   center: [52.65, 5.78],
   zoom: 14,
   minZoom: 2,
-  maxZoom: 24,
+  maxZoom: 22,
   layers: [osm]
 });
+
 const baseLayers = {
   "OSM": osm,
   "PDOK Luchtfoto": luchtfoto,
@@ -70,7 +78,7 @@ const baseLayers = {
 };
 L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
 
-// ---- Stijlfunctie, label, popup ----
+// --- Styles ---
 function styleFeature(f) {
   const tags = f.properties.tags || {};
   if (tags.building) {
@@ -81,7 +89,7 @@ function styleFeature(f) {
       fillOpacity: 0.4
     };
   }
-  if (tags["natural"]==="water") {
+  if (tags["natural"] === "water") {
     return {
       color: "#1380ff",
       weight: 2,
@@ -89,20 +97,70 @@ function styleFeature(f) {
       fillOpacity: 0.35
     };
   }
-  if (tags.landuse==="residential" && !tags.building) {
+  if (tags.landuse === "residential" && !tags.building) {
     return {
       color: "#888888",
       weight: 2,
       fillColor: "#e0e0e0",
       fillOpacity: 0.2
-    }
+    };
   }
+  if (tags.landuse === "meadow") {
+    return {
+      color: "#4caf50", // grasgroen
+      weight: 2,
+      fillColor: "#a5d6a7",
+      fillOpacity: 0.4
+    };
+  }
+  if (tags.landuse === "forrest") {
+    return {
+      color: "#004d00",
+      weight: 2,
+      fillColor: "#003300",
+      fillOpacity: 0.6
+    };
+  }
+  if (tags.landuse === "allotments") {
+    return {
+      color: "#e6c300",
+      weight: 2,
+      fillColor: "#fff799",
+      fillOpacity: 0.6
+    };
+  }
+  if (tags.landuse === "orchard") {
+    return {
+      color: "#d97b00",
+      weight: 2,
+      fillColor: "#ffb74d",
+      fillOpacity: 0.6
+    };
+  }
+  if (tags.landuse === "farmland") {
+    return {
+      color: "#4e342e",
+      weight: 2,
+      fillColor: "#3e2723",
+      fillOpacity: 0.6
+    };
+  }
+  if (tags.natural === "sand") {
+    return {
+      color: "#d9cbbd",
+      weight: 2,
+      fillColor: "#f4f1e9",
+      fillOpacity: 0.6
+    };
+  }
+  // fallback kleur
   return {
-    color: "#666",
-    weight: 1,
-    fillOpacity: 0.05
+    color: "#000000",
+    weight: 2,
+    fillOpacity: 0.2
   };
 }
+
 function tagsTable(tags) {
   let rows = Object.entries(tags).map(
     ([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`
@@ -112,6 +170,7 @@ function tagsTable(tags) {
     <tbody>${rows}</tbody>
   </table>`;
 }
+
 function overpassToGeoJSON(data) {
   return {
     type: "FeatureCollection",
@@ -131,23 +190,31 @@ function overpassToGeoJSON(data) {
   };
 }
 
-// ---- GeoJSON inladen, laag toevoegen, labels en popups ----
+// Voeg icon voor forest toe als marker
+const forestIcon = L.divIcon({
+  className: 'forest-icon',
+  iconSize: [20, 20],
+  interactive: false
+});
+
+// --- GeoJSON laden ---
 fetch('overpass.geojson')
   .then(resp => resp.json())
   .then(data => {
-    // Detecteer of het bestand direct een FeatureCollection is (GeoJSON), of een Overpass-export
     let geojsonData;
     if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
       geojsonData = data;
     } else {
       geojsonData = overpassToGeoJSON(data);
     }
+
     const geojsonLayer = L.geoJSON(geojsonData, {
       style: styleFeature,
       onEachFeature: function(feature, layer) {
         layer.bindPopup(tagsTable(feature.properties.tags));
+
         const tags = feature.properties.tags;
-        if (tags['kad:perceelnr']) {
+        if (tags['kad:perceelnr'] && map.getZoom() >= 18) {
           const coords = feature.geometry.coordinates[0];
           let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
           coords.forEach(([x,y]) => {
@@ -166,11 +233,75 @@ fetch('overpass.geojson')
             interactive:false
           }).addTo(map);
         }
+
+        // Voor landuse=forrest een icon toevoegen, onafhankelijk van zoom
+        if (tags.landuse === "forrest") {
+          const coords = feature.geometry.coordinates[0];
+          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+          coords.forEach(([x,y]) => {
+            if(x<minX) minX=x;
+            if(x>maxX) maxX=x;
+            if(y<minY) minY=y;
+            if(y>maxY) maxY=y;
+          });
+          const center = [(minY+maxY)/2, (minX+maxX)/2];
+          L.marker(center, {icon: forestIcon, interactive:false}).addTo(map);
+        }
+
         layer.bringToFront();
       }
     });
     geojsonLayer.addTo(map);
     geojsonLayer.bringToFront();
+
+    // Weergave perceelnummers afhankelijk van zoomniveau updaten
+    map.on('zoomend', () => {
+      const zoom = map.getZoom();
+      // Eerst alle label markers verwijderen
+      map.eachLayer(layer => {
+        if(layer.options && layer.options.icon && (layer.options.icon.options.className === 'kadastraal-label' || layer.options.icon.options.className === 'forest-icon')) {
+          map.removeLayer(layer);
+        }
+      });
+      if (zoom >= 18) {
+        geojsonLayer.eachLayer(layer => {
+          const feature = layer.feature;
+          const tags = feature.properties.tags;
+          if (tags['kad:perceelnr']) {
+            const coords = feature.geometry.coordinates[0];
+            let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+            coords.forEach(([x,y]) => {
+              if(x<minX) minX=x;
+              if(x>maxX) maxX=x;
+              if(y<minY) minY=y;
+              if(y>maxY) maxY=y;
+            });
+            const center = [(minY+maxY)/2, (minX+maxX)/2];
+            L.marker(center, {
+              icon: L.divIcon({
+                className: 'kadastraal-label',
+                iconSize: [60, 20],
+                html: tags['kad:perceelnr']
+              }),
+              interactive:false
+            }).addTo(map);
+          }
+          // Voor forrest blijft icoon altijd getoond
+          if (tags.landuse === "forrest") {
+            const coords = feature.geometry.coordinates[0];
+            let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+            coords.forEach(([x,y]) => {
+              if(x<minX) minX=x;
+              if(x>maxX) maxX=x;
+              if(y<minY) minY=y;
+              if(y>maxY) maxY=y;
+            });
+            const center = [(minY+maxY)/2, (minX+maxX)/2];
+            L.marker(center, {icon: forestIcon, interactive:false}).addTo(map);
+          }
+        });
+      }
+    });
   });
 </script>
 </body>
