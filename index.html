@@ -145,7 +145,7 @@ function buildArtikelLbl(tags) {
 }
 function definitionListFromFirstResult(x) {
   // bouw dl met Artikel, Soort, Huisnr (indien aanwezig), Oppervlakte, OAT-scan knop
-  perceel = x.results[0]
+  perceel = x?.results[0]
   if (!perceel) return '';
   let dl = '<dl class="details">';
   dl += `<dt>Artikel</dt><dd>getArtikelHTML(x.artikelen[0])</dd>`;
@@ -207,7 +207,7 @@ fetch('overpass.geojson')
               .then(resp => resp.json())
               .then(json => {
                 const artikelLbl = buildArtikelLbl(t);
-                const dlHtml = definitionListFromFirstResult(json[0]);
+                const dlHtml = definitionListFromFirstResult(json);
                 const popupHtml = tagsTable(t) + dlHtml;
                 layer.bindPopup(popupHtml).openPopup();
               })
