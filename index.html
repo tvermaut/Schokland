@@ -71,6 +71,18 @@
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+
+  function includeJs(jsFilePath) {
+    var js = document.createElement("script");
+
+    js.type = "text/javascript";
+    js.src = jsFilePath;
+
+    document.body.appendChild(js);
+}
+
+includeJs("artikel.js");
+
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxNativeZoom: 19,
   maxZoom: 22,
@@ -131,11 +143,12 @@ function buildArtikelLbl(tags) {
   }
   return lbl;
 }
-function definitionListFromFirstResult(perceel) {
+function definitionListFromFirstResult(x) {
   // bouw dl met Artikel, Soort, Huisnr (indien aanwezig), Oppervlakte, OAT-scan knop
+  perceel = x.results[0]
   if (!perceel) return '';
   let dl = '<dl class="details">';
-  dl += `<dt>Artikel</dt><dd>${buildArtikelLbl(perceel)}</dd>`;
+  dl += `<dt>Artikel</dt><dd>getArtikelHTML(x.artikelen[0])</dd>`;
   dl += `<dt>Soort</dt><dd>${perceel.Perceel?.grondGebruik || ''}</dd>`;
   if (perceel.Perceel?.huisnrs && perceel.Perceel.huisnrs.length > 0) {
     dl += `<dt>Huisnr</dt><dd>${perceel.Perceel.huisnrs.join(', ')}</dd>`;
@@ -164,6 +177,8 @@ const forestIcon = L.divIcon({
   iconSize: [20, 20],
   interactive: false
 });
+
+
 L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
 fetch('overpass.geojson')
   .then(resp => resp.json())
