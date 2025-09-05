@@ -1,54 +1,176 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="utf-8" />
-  <title>Overpass API Viewer</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <meta charset="utf-8"/>
+  <title>Schokland</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
   <style>
     #map { height: 100vh; }
+    .leaflet-container { background: #ddd; }
+    .kadastraal-label {
+      font-weight: bold;
+      color: #a10000;
+      text-align: center;
+      font-size: 14px;
+      text-shadow: 1px 1px 3px white, -1px -1px 3px white;
+      pointer-events: none;
+    }
+    table.tags {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    table.tags td, table.tags th {
+      border: 1px solid #ccc;
+      padding: 4px 8px;
+      text-align: left;
+      background: #faf9fa;
+    }
+    table.tags th {
+      background: #edecfe;
+    }
   </style>
 </head>
 <body>
-  <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    // https://overpass.huc.knaw.nl/api/interpreter?data=%5Bout%3Ajson%5D%3B%0Awr%5B%27kad%3Agemeente%27%3D%27Schokland%27%5D%3B%0Aout%20geom%3B
-    fetch("overpass.geojson")
-      .then(response => response.json())
-      .then(data => {
-        // Maak de kaart aan
-        var map = L.map('map').setView([52.65, 5.8], 12);
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
 
-        // Voeg een basemap toe
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 18,
-          attribution: '&copy; OpenStreetMap',
-        }).addTo(map);
+// --- Baselayers ---
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 24,
+  attribution: '&copy; OpenStreetMap-bijdragers'
+});
 
-        // Functie om OSM elementen te plotten
-        function addOSMFeature(element) {
-          if (element.type === "node" && element.lat && element.lon) {
-            L.circleMarker([element.lat, element.lon], {radius: 6, color: "red"}).addTo(map)
-              .bindPopup(JSON.stringify(element.tags));
-          } else if (element.type === "way" && element.nodes) {
-            const latlngs = element.geometry.map(n => [n.lat, n.lon]);
-            L.polyline(latlngs, {color: "blue"}).addTo(map)
-              .bindPopup(JSON.stringify(element.tags));
-          } else if (element.type === "relation" && element.members) {
-            // Eenvoudige benadering; complexe geometrieën niet volledig gedekt
-            element.members.filter(m => m.geometry).forEach(m => {
-              const latlngs = m.geometry.map(n => [n.lat, n.lon]);
-              L.polyline(latlngs, {color: "green", weight: 2}).addTo(map);
-            });
-          }
-        }
+const luchtfoto = L.tileLayer.wms(
+  "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
+    layers: 'Actueel_ortho25',
+    format: 'image/jpeg',
+    tilematrixSet: 'EPSG:3857',
+    transparent: false,
+    attribution: 'Luchtfoto'
+});
 
-        // Voeg alle features toe
-        if (data.elements) {
-          data.elements.forEach(addOSMFeature);
-        }
+const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
+  maxZoom: 20,
+  attribution: 'Minuutplan 1832'
+});
+
+// --- Kaartinit, LayerSwitcher ---
+const map = L.map('map', {
+  center: [52.65, 5.78],
+  zoom: 14,
+  layers: [osm]
+});
+const baseLayers = {
+  "OSM": osm,
+  "PDOK Luchtfoto": luchtfoto,
+  "Minuutplan 1832": minuutplan
+};
+L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
+
+// ---- Gebouwdata --- (laad de JSON zoals aangeleverd, hier als 'data')
+const data = fetch('overpass.geojson')/* plak hier jouw Overpass-JSON of importeer het via fetch of als extern bestand */;
+ 
+// ---- Stijlfunctie, label, popup ----
+function styleFeature(f) {
+  const tags = f.properties.tags || {};
+  if (tags.building) {
+    return {
+      color: "#a10000",
+      weight: 2,
+      fillColor: "#ff4444",
+      fillOpacity: 0.4
+    };
+  }
+  if (tags["natural"]==="water") {
+    return {
+      color: "#1380ff",
+      weight: 2,
+      fillColor: "#76aaff",
+      fillOpacity: 0.35
+    };
+  }
+  if (tags.landuse==="residential" && !tags.building) {
+    return {
+      color: "#888888",
+      weight: 2,
+      fillColor: "#e0e0e0",
+      fillOpacity: 0.2
+    }
+  }
+  return {
+    color: "#666",
+    weight: 1,
+    fillOpacity: 0.05
+  };
+}
+
+function tagsTable(tags) {
+  let rows = Object.entries(tags).map(
+    ([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`
+  ).join('');
+  return `<table class="tags">
+    <thead><tr><th>tag</th><th>waarde</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// -- Zet Overpass JSON om in GeoJSON om met alleen gebouwen en relevante polygons --
+function overpassToGeoJSON(data) {
+  // Alleen 'way' elementen met een geometry (polygon)
+  return {
+    type: "FeatureCollection",
+    features: (data.elements || []).filter(el =>
+      el.type === "way" && Array.isArray(el.geometry)
+    ).map(el => ({
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [el.geometry.map(pt => [pt.lon, pt.lat])]
+      },
+      properties: {
+        tags: el.tags || {},
+        id: el.id
+      }
+    }))
+  };
+}
+
+const geojsonData = overpassToGeoJSON(data);
+
+const geojsonLayer = L.geoJSON(geojsonData, {
+  style: styleFeature,
+  onEachFeature: function(feature, layer) {
+    // Popup met tags als tabel
+    layer.bindPopup(tagsTable(feature.properties.tags));
+    // Kad. perceelnr label centreren
+    const tags = feature.properties.tags;
+    if (tags['kad:perceelnr']) {
+      // Bepaal centrum door omtrek-midden te nemen
+      const coords = feature.geometry.coordinates[0];
+      let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+      coords.forEach(([x,y]) => {
+        if(x<minX) minX=x;
+        if(x>maxX) maxX=x;
+        if(y<minY) minY=y;
+        if(y>maxY) maxY=y;
       });
-  </script>
+      const center = [(minY+maxY)/2, (minX+maxX)/2];
+      L.marker(center, {
+        icon: L.divIcon({
+          className: 'kadastraal-label',
+          iconSize: [60, 20],
+          html: tags['kad:perceelnr']
+        }),
+        interactive:false // klik valt door naar onderliggende laag
+      }).addTo(map);
+    }
+  }
+});
+geojsonLayer.addTo(map);
+
+</script>
 </body>
 </html>
