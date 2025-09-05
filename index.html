@@ -148,7 +148,7 @@ function definitionListFromFirstResult(x) {
   perceel = x?.results[0]
   if (!perceel) return '';
   let dl = '<dl class="details">';
-  dl += `<dt>Artikel</dt><dd>getArtikelHTML(x.artikelen[0])</dd>`;
+  dl += `<dt>Artikel</dt><dd>$(getArtikelHTML(x.artikelen[0]))</dd>`;
   dl += `<dt>Soort</dt><dd>${perceel.Perceel?.grondGebruik || ''}</dd>`;
   if (perceel.Perceel?.huisnrs && perceel.Perceel.huisnrs.length > 0) {
     dl += `<dt>Huisnr</dt><dd>${perceel.Perceel.huisnrs.join(', ')}</dd>`;
