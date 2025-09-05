@@ -113,7 +113,6 @@ const baseLayers = {
   "PDOK Luchtfoto": luchtfoto,
   "Minuutplan 1832": minuutplan
 };
-L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
 function styleFeature(f) {
   const tags = f.properties.tags || {};
   if (tags.building) return {color: "#a10000", weight: 2, fillColor: "#ff4444", fillOpacity: 0.4};
