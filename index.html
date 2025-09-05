@@ -5,10 +5,10 @@
   <title>Schokland</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
   <style>
-    #map { height: 100vh; }
-    .leaflet-container { background: #ddd; }
+    html, body {height: 100%; margin: 0; padding: 0;}
+    #map {height: 100vh; width: 100vw;}
+    .leaflet-container {background: #ddd;}
     .kadastraal-label {
       font-weight: bold;
       color: #a10000;
@@ -36,31 +36,31 @@
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-
-// --- Baselayers ---
+// --- Baselayers --- 
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 24,
   attribution: '&copy; OpenStreetMap-bijdragers'
 });
-
 const luchtfoto = L.tileLayer.wms(
   "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
     layers: 'Actueel_ortho25',
     format: 'image/jpeg',
     tilematrixSet: 'EPSG:3857',
     transparent: false,
-    attribution: 'Luchtfoto'
+    maxZoom: 24,
+    attribution: 'Luchtfoto via PDOK'
 });
-
 const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
-  maxZoom: 20,
-  attribution: 'Minuutplan 1832'
+  maxZoom: 24,
+  attribution: 'Minuutplan 1832 via Huygens ING'
 });
 
 // --- Kaartinit, LayerSwitcher ---
 const map = L.map('map', {
   center: [52.65, 5.78],
   zoom: 14,
+  minZoom: 2,
+  maxZoom: 24,
   layers: [osm]
 });
 const baseLayers = {
@@ -70,9 +70,6 @@ const baseLayers = {
 };
 L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
 
-// ---- Gebouwdata --- (laad de JSON zoals aangeleverd, hier als 'data')
-const data = fetch('overpass.geojson')/* plak hier jouw Overpass-JSON of importeer het via fetch of als extern bestand */;
- 
 // ---- Stijlfunctie, label, popup ----
 function styleFeature(f) {
   const tags = f.properties.tags || {};
@@ -106,7 +103,6 @@ function styleFeature(f) {
     fillOpacity: 0.05
   };
 }
-
 function tagsTable(tags) {
   let rows = Object.entries(tags).map(
     ([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`
@@ -116,10 +112,7 @@ function tagsTable(tags) {
     <tbody>${rows}</tbody>
   </table>`;
 }
-
-// -- Zet Overpass JSON om in GeoJSON om met alleen gebouwen en relevante polygons --
 function overpassToGeoJSON(data) {
-  // Alleen 'way' elementen met een geometry (polygon)
   return {
     type: "FeatureCollection",
     features: (data.elements || []).filter(el =>
@@ -138,39 +131,47 @@ function overpassToGeoJSON(data) {
   };
 }
 
-const geojsonData = overpassToGeoJSON(data);
-
-const geojsonLayer = L.geoJSON(geojsonData, {
-  style: styleFeature,
-  onEachFeature: function(feature, layer) {
-    // Popup met tags als tabel
-    layer.bindPopup(tagsTable(feature.properties.tags));
-    // Kad. perceelnr label centreren
-    const tags = feature.properties.tags;
-    if (tags['kad:perceelnr']) {
-      // Bepaal centrum door omtrek-midden te nemen
-      const coords = feature.geometry.coordinates[0];
-      let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-      coords.forEach(([x,y]) => {
-        if(x<minX) minX=x;
-        if(x>maxX) maxX=x;
-        if(y<minY) minY=y;
-        if(y>maxY) maxY=y;
-      });
-      const center = [(minY+maxY)/2, (minX+maxX)/2];
-      L.marker(center, {
-        icon: L.divIcon({
-          className: 'kadastraal-label',
-          iconSize: [60, 20],
-          html: tags['kad:perceelnr']
-        }),
-        interactive:false // klik valt door naar onderliggende laag
-      }).addTo(map);
+// ---- GeoJSON inladen, laag toevoegen, labels en popups ----
+fetch('overpass.geojson')
+  .then(resp => resp.json())
+  .then(data => {
+    // Detecteer of het bestand direct een FeatureCollection is (GeoJSON), of een Overpass-export
+    let geojsonData;
+    if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
+      geojsonData = data;
+    } else {
+      geojsonData = overpassToGeoJSON(data);
     }
-  }
-});
-geojsonLayer.addTo(map);
-
+    const geojsonLayer = L.geoJSON(geojsonData, {
+      style: styleFeature,
+      onEachFeature: function(feature, layer) {
+        layer.bindPopup(tagsTable(feature.properties.tags));
+        const tags = feature.properties.tags;
+        if (tags['kad:perceelnr']) {
+          const coords = feature.geometry.coordinates[0];
+          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+          coords.forEach(([x,y]) => {
+            if(x<minX) minX=x;
+            if(x>maxX) maxX=x;
+            if(y<minY) minY=y;
+            if(y>maxY) maxY=y;
+          });
+          const center = [(minY+maxY)/2, (minX+maxX)/2];
+          L.marker(center, {
+            icon: L.divIcon({
+              className: 'kadastraal-label',
+              iconSize: [60, 20],
+              html: tags['kad:perceelnr']
+            }),
+            interactive:false
+          }).addTo(map);
+        }
+        layer.bringToFront();
+      }
+    });
+    geojsonLayer.addTo(map);
+    geojsonLayer.bringToFront();
+  });
 </script>
 </body>
 </html>
