@@ -206,7 +206,7 @@ const forestIcon = L.divIcon({
 
 
 L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
-fetch('overpass.geojson')
+fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {headers: {'Accept': 'application/json'}})
   .then(resp => resp.json())
   .then(data => {
     let geojsonData;
