@@ -308,31 +308,44 @@
       }
     });
 
-    // PerceelTarieven in zelfde tabel met conditie bullet/geen bullet
+    // PerceelTarieven in dezelfde tabel met correcte logica
     if(oatTags.perceelTarieven && oatTags.perceelTarieven.length > 0){
       const tariefCount = oatTags.perceelTarieven.length;
       if(tariefCount === 1){
         const x = oatTags.perceelTarieven[0];
         if(x.tarief && x.tarief.tariefsoort && x.tarief.klasse && x.oppervlak && x.tarief.tarief){
           const naam = x.tarief.tariefsoort.naam;
+          const soort = x.tarief.tariefsoort.soort;
           const klasse = x.tarief.klasse;
           const op = x.oppervlak;
           const tariefValue = x.tarief.tarief/100;
-          // Eindresultaat nog eens door 100 gedeeld
-          const totaal = Math.round(((op/100)*tariefValue*100)/100)/100;
-          html += `<tr><td>tarief</td><td>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</td></tr>`;
+          let totaalStr = '';
+          if(soort === 'GEBOUWD'){
+            totaalStr = '';
+          } else {
+            // alleen formule voor ongebouwd
+            const totaal = Math.round(((op/100)*tariefValue*100)/100)/100/100;
+            totaalStr = ` = &#402;&thinsp;${totaal.toFixed(2)}`;
+          }
+          html += `<tr><td>tarief</td><td>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue}${totaalStr})</td></tr>`;
         }
       } else {
-        // meerdere tarieven met bullets in <ul> binnen cel
         html += `<tr><td>tarief</td><td><ul>`;
         oatTags.perceelTarieven.forEach(x => {
           if(x.tarief && x.tarief.tariefsoort && x.tarief.klasse && x.oppervlak && x.tarief.tarief){
             const naam = x.tarief.tariefsoort.naam;
+            const soort = x.tarief.tariefsoort.soort;
             const klasse = x.tarief.klasse;
             const op = x.oppervlak;
             const tariefValue = x.tarief.tarief/100;
-            const totaal = Math.round(((op/100)*tariefValue*100)/100)/100;
-            html += `<li>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</li>`;
+            let totaalStr = '';
+            if(soort === 'GEBOUWD'){
+              totaalStr = '';
+            } else {
+              const totaal = Math.round(((op/100)*tariefValue*100)/100)/100/100;
+              totaalStr = ` = &#402;&thinsp;${totaal.toFixed(2)}`;
+            }
+            html += `<li>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue}${totaalStr})</li>`;
           }
         });
         html += `</ul></td></tr>`;
