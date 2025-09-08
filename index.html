@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>OpenLayers Kadaster met uitgebreide OAT weergave</title>
+<title>OpenLayers Kadaster met correcte tarief-rijen</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol-layerswitcher/dist/ol-layerswitcher.css" />
@@ -202,13 +202,21 @@
     }
   });
 
-  const highlightStyle = feature => new ol.style.Style({
-    stroke: new ol.style.Stroke({ color: 'rgba(255, 255, 0, 0.7)', width: 10 }),
-    fill: new ol.style.Fill({ color: 'rgba(255, 255, 0, 0.1)' }),
-    text: createFeatureText(feature)
-  });
 
-  function createFeatureText(feature) {
+  const highlightStyle = feature => {
+    return new ol.style.Style({
+      stroke: new ol.style.Stroke({
+        color: 'rgba(255, 255, 0, 0.7)',
+        width: 10
+      }),
+      fill: new ol.style.Fill({
+        color: 'rgba(255, 255, 0, 0.1)'
+      }),
+      text: createFeatureText(feature)
+    });
+  };
+
+  function createFeatureText(feature){
     if(map){
       const zoom = map.getView().getZoom();
       if(zoom < 18) return null;
@@ -219,8 +227,8 @@
     return new ol.style.Text({
       text: text,
       font: 'bold 14px Calibri,sans-serif',
-      fill: new ol.style.Fill({ color: '#a10000' }),
-      stroke: new ol.style.Stroke({ color: 'white', width: 3 }),
+      fill: new ol.style.Fill({color: '#a10000'}),
+      stroke: new ol.style.Stroke({color: 'white', width: 3}),
       overflow: true
     });
   }
@@ -249,30 +257,32 @@
 
   function buildPopupTable(oatTags = {}, osmProps = {}) {
     let html = `<h3>OSM Tags</h3><table><thead><tr><th>Tag</th><th>Waarde</th></tr></thead><tbody>`;
+
+    // OSM tags, huisnrs verbergen indien leeg
     for(let [k,v] of Object.entries(osmProps)){
       if(v !== undefined && v !== null && !OSM_HIDE_KEYS.has(k)){
+        if(k === 'huisnrs' && (!v.length || v.length === 0)){
+          continue; // negeer lege huisnrs
+        }
         html += `<tr><td>${k}</td><td>${v}</td></tr>`;
       }
     }
     html += `</tbody></table><h3>OAT Perceelgegevens</h3>`;
 
-    // oppervlak eerst
-    if(oatTags.oppervlak !== undefined && oatTags.oppervlak !== null){
-      html += `<p><strong>Oppervlak:</strong> ${formatOppervlak(oatTags.oppervlak)}</p>`;
-    }
-    // grondGebruik vlak na oppervlak
-    if(oatTags.grondGebruik){
-      html += `<p><strong>Grondgebruik:</strong> ${oatTags.grondGebruik}</p>`;
-    }
+    // Oppervlak en grondGebruik altijd eerste 2 rijen
+    html += `<tr><td><strong>Oppervlak</strong></td><td>${oatTags.oppervlak !== undefined ? formatOppervlak(oatTags.oppervlak) : ''}</td></tr>`;
+    html += oatTags.grondGebruik ? `<tr><td><strong>Grondgebruik</strong></td><td>${oatTags.grondGebruik}</td></tr>` : '';
 
-    // overige velden
+    // Overige OAT velden behalve perceelTarieven, oppervlak en grondGebruik
     let filteredKeys = Object.keys(oatTags).filter(k =>
       k !== 'oppervlak' && k !== 'grondGebruik' && k !== 'perceelTarieven' &&
-      oatTags[k] !== null && oatTags[k] !== undefined && !OAT_HIDE_KEYS.has(k));
+      oatTags[k] !== null && oatTags[k] !== undefined && !OAT_HIDE_KEYS.has(k)
+    );
 
+    // Bouw tabel met overige attributen
     if(filteredKeys.length > 0){
       html += `<table><thead><tr><th>Attribuut</th><th>Waarde</th></tr></thead><tbody>`;
-      filteredKeys.forEach(k=>{
+      filteredKeys.forEach(k => {
         let v = oatTags[k];
         if(k === 'artikelLink'){
           html += `<tr><td>Artikel</td><td>${createArtikelString(v)}</td></tr>`;
@@ -280,21 +290,21 @@
           try{
             const url = 'https://tvermaut.github.io/hisgis-oat-scan-view/?'+ encodeURIComponent(v.code);
             html += `<tr><td>Scan</td><td><a href="${url}" target="_blank" rel="noopener noreferrer">Bekijk scan</a></td></tr>`;
-          }catch(e){
+          } catch(e){
             html += `<tr><td>Scan</td><td>Onbekende scan</td></tr>`;
           }
         } else if(k === 'belastbaar_inkomen'){
           html += `<tr><td>bel.ink.</td><td>${formatFlorijn(v,true)}</td></tr>`;
         } else if(k === 'belastbaar_inkomen_gebouwd'){
           html += `<tr><td>bel.ink.geb.</td><td>${formatFlorijn(v,false)}</td></tr>`;
-        } else{
+        } else {
           html += `<tr><td>${k}</td><td>${v}</td></tr>`;
         }
       });
       html += `</tbody></table>`;
     }
 
-    // perceelTarieven show per specs: label tarief zonder bullets als 1 tarief, bullets if meerdere
+    // PerceelTarieven optimaal weergeven
     if(oatTags.perceelTarieven && oatTags.perceelTarieven.length > 0){
       const tariefCount = oatTags.perceelTarieven.length;
       if(tariefCount === 1){
@@ -304,7 +314,8 @@
           const klasse = x.tarief.klasse;
           const op = x.oppervlak;
           const tariefValue = x.tarief.tarief/100;
-          const totaal = Math.round((op/100)*tariefValue*100)/100;
+          // Eindresultaat gedeeld door 100 zoals gevraagd
+          const totaal = Math.round(((op/100)*tariefValue*100)/100)/100;
           html += `<p><strong>tarief:</strong> ${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</p>`;
         }
       } else {
@@ -315,14 +326,13 @@
             const klasse = x.tarief.klasse;
             const op = x.oppervlak;
             const tariefValue = x.tarief.tarief/100;
-            const totaal = Math.round((op/100)*tariefValue*100)/100;
+            const totaal = Math.round(((op/100)*tariefValue*100)/100)/100;
             html += `<li>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</li>`;
           }
         });
         html += `</ul>`;
       }
     }
-
 
     return html;
   }
