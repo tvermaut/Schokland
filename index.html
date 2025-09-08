@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>OpenLayers Kadaster debugging</title>
+<title>OpenLayers Debugging Tags</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol-layerswitcher/dist/ol-layerswitcher.css" />
@@ -44,206 +44,194 @@
 <script src="osmtogeojson.js"></script>
 
 <script>
-console.log("Script geladen, start initialisatie");
+  console.log('Script geladen, kaart aanmaken');
 
-// Basislaag en kadastrale vectorlaag
-const osmLayer = new ol.layer.Tile({
-  source: new ol.source.OSM(),
-  visible: true,
-  title: 'OpenStreetMap',
-  type: 'base'
-});
-const vectorSource = new ol.source.Vector();
-const vectorLayer = new ol.layer.Vector({
-  source: vectorSource,
-  title: 'Percelen',
-  style: feature => {
-    const tags = feature.get('tags') || {};
-    console.log('Bepaal stijl voor feature met tags:', tags);
-    if(tags.building) {
+  const osmLayer = new ol.layer.Tile({
+    source: new ol.source.OSM(),
+    visible: true,
+    title: 'OSM',
+    type: 'base'
+  });
+
+  const vectorSource = new ol.source.Vector();
+
+  const vectorLayer = new ol.layer.Vector({
+    source: vectorSource,
+    title: 'Percelen',
+    style: feature => {
+      const tags = feature.get('tags') || {};
+      console.log('Stijl bepalen voor feature met tags:', tags);
+      // Jouw stijlregels hier
+      if(tags.building) {
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(255,68,68,0.4)'}),
+          stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(tags.natural==='water'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(118,169,255,0.35)'}),
+          stroke: new ol.style.Stroke({color: '#1380ff', width: 2})
+        });
+      }
       return new ol.style.Style({
-        fill: new ol.style.Fill({color: 'rgba(255,68,68,0.4)'}),
+        fill: new ol.style.Fill({color: 'rgba(255,255,255,0.4)'}),
         stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
         text: createFeatureText(feature)
       });
     }
-    if(tags.natural === 'water') {
-      return new ol.style.Style({
-        fill: new ol.style.Fill({color: 'rgba(118,169,255,0.35)'}),
-        stroke: new ol.style.Stroke({color: '#1380ff', width: 2}),
-        text: createFeatureText(feature)
-      });
+  });
+
+  function createFeatureText(feature) {
+    if(map){
+      const zoom = map.getView().getZoom();
+      if(zoom<18) return null;
     }
-    if(tags.landuse === 'residential' && !tags.building) {
-      return new ol.style.Style({
-        fill: new ol.style.Fill({color: 'rgba(136,136,136,0.2)'}),
-        stroke: new ol.style.Stroke({color: '#888', width: 2}),
-        text: createFeatureText(feature)
-      });
-    }
-    // Default stijl
-    return new ol.style.Style({
-      fill: new ol.style.Fill({color: 'rgba(255,255,255,0.4)'}),
-      stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
-      text: createFeatureText(feature)
+    const tags = feature.get('tags')||{};
+    let text = tags['kad:perceelnr'] || '';
+    if(tags['kad:perceelnrtvg']) text += '/' + tags['kad:perceelnrtvg'];
+    return new ol.style.Text({
+      text: text,
+      font: 'bold 14px Calibri,sans-serif',
+      fill: new ol.style.Fill({color: '#a10000'}),
+      stroke: new ol.style.Stroke({color: 'white', width: 3}),
+      overflow: true
     });
   }
-});
 
-function createFeatureText(feature) {
-  const zoom = map.getView().getZoom();
-  const tags = feature.get('tags') || {};
-  const shouldShow = (zoom >= 18);
-  if(!shouldShow) return null;
-
-  let text = tags['kad:perceelnr'] || '';
-  if(tags['kad:perceelnrtvg']) {
-    text += '/' + tags['kad:perceelnrtvg'];
-  }
-  return new ol.style.Text({
-    text: text,
-    font: 'bold 14px Calibri,sans-serif',
-    fill: new ol.style.Fill({color: '#a10000'}),
-    stroke: new ol.style.Stroke({color: 'white', width: 3}),
-    overflow: true
-  });
-}
-
-const map = new ol.Map({
-  target: 'map',
-  layers: [osmLayer, vectorLayer],
-  view: new ol.View({
-    center: ol.proj.fromLonLat([5.775, 52.64]),
-    zoom: 14,
-    minZoom: 2,
-    maxZoom: 22
-  })
-});
-
-const layerSwitcher = new ol.control.LayerSwitcher();
-map.addControl(layerSwitcher);
-
-const popupContainer = document.getElementById('popup');
-const popupOverlay = new ol.Overlay({
-  element: popupContainer,
-  positioning: 'bottom-center',
-  stopEvent: false,
-  offset: [0, -10]
-});
-map.addOverlay(popupOverlay);
-
-function tagsTable(tags) {
-  let html = '<table><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>';
-  for(const k in tags){
-    html += `<tr><td>${k}</td><td>${tags[k]}</td></tr>`;
-  }
-  html += '</tbody></table>';
-  return html;
-}
-
-map.on('singleclick', evt => {
-  console.log('Kaart geklikt op', evt.coordinate);
-  popupOverlay.setPosition(undefined);
-  popupContainer.style.display = 'none';
-
-  const features = [];
-  map.forEachFeatureAtPixel(evt.pixel, feature => features.push(feature));
-
-  console.log('Aantal features op pixel:', features.length);
-  if(features.length === 0) return;
-
-  for(const feature of features){
-    const geom = feature.getGeometry();
-    if(!geom) {console.log('Feature zonder geometrie'); continue;}
-
-    const coords = geom.clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
-    let turfGeom = null;
-    if(geom.getType() === 'Polygon') turfGeom = turf.polygon(coords);
-    else if(geom.getType() === 'MultiPolygon') turfGeom = turf.multiPolygon(coords);
-
-    if(turfGeom){
-      const pnt = turf.point(ol.proj.toLonLat(evt.coordinate));
-      let insideHole = false;
-      for(let i=1; i < turfGeom.geometry.coordinates.length; i++){
-        let hole = turf.polygon([turfGeom.geometry.coordinates[i]]);
-        if(turf.booleanPointInPolygon(pnt, hole)){
-          insideHole = true;
-          console.log('Klik binnen hole, popup negeren');
-          break;
-        }
-      }
-      if(insideHole) continue;
-    }
-
-    const tags = feature.get('tags') || {};
-    console.log('Popup tonen voor feature. Tags:', tags);
-
-    // Haal extra info op bij OAT API
-    const gemeente = tags['kad:gemeente'];
-    const sectie = tags['kad:sectie'];
-    const perceel = tags['kad:perceelnr'];
-    const perceeltvg = tags['kad:perceelnrtvg'] || '';
-
-    if(!gemeente || !sectie || !perceel){
-      console.warn('Onvoldoende adresdata:', gemeente, sectie, perceel);
-      popupContainer.innerHTML = '<p>Onvoldoende perceel data voor extra info.</p>';
-      popupOverlay.setPosition(evt.coordinate);
-      popupContainer.style.display = 'block';
-      break;
-    }
-
-    let url = `https://oat.hisgis.nl/oat-ws/rest/percelen/${encodeURIComponent(gemeente)}/${encodeURIComponent(sectie)}/${encodeURIComponent(perceel)}`;
-    if(perceeltvg) url += `/${encodeURIComponent(perceeltvg)}`;
-    console.log('OAT API request URL:', url);
-
-    fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      console.log('OAT API response:', data);
-      if(data.results && data.results.length){
-        const res = data.results[0];
-        let html = `<h3>Perceel ${gemeente} ${sectie} ${perceel}${perceeltvg? '/' + perceeltvg : ''}</h3>`;
-        html += '<table><tbody>';
-        html += `<tr><th>Gebruik</th><td>${res.grondGebruik || 'n.v.t.'}</td></tr>`;
-        html += `<tr><th>Oppervlak</th><td>${res.oppervlak || 'n.v.t.'} m²</td></tr>`;
-        if(res.perceelnrtvg) html += `<tr><th>Perceel TVG</th><td>${res.perceelnrtvg}</td></tr>`;
-        if(res.huisnrs && res.huisnrs.length) html += `<tr><th>Huisnummers</th><td>${res.huisnrs.join(', ')}</td></tr>`;
-        html += '</tbody></table>';
-        popupContainer.innerHTML = html;
-      } else {
-        popupContainer.innerHTML = '<p>Geen extra gegevens beschikbaar.</p>';
-      }
-      popupOverlay.setPosition(evt.coordinate);
-      popupContainer.style.display = 'block';
+  const map = new ol.Map({
+    target: 'map',
+    layers: [osmLayer, vectorLayer],
+    view: new ol.View({
+      center: ol.proj.fromLonLat([5.775, 52.64]),
+      zoom: 14,
+      minZoom: 2,
+      maxZoom: 22
     })
-    .catch(e => {
-      console.error('Fout bij laden OAT data:', e);
-      popupContainer.innerHTML = `<p>Fout bij laden perceel info: ${e.message}</p>`;
-      popupOverlay.setPosition(evt.coordinate);
-      popupContainer.style.display = 'block';
-    });
-    break; // Slechts 1 popup tegelijk
-  }
-});
-
-console.log('OSM API data laden...');
-fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
-  headers: {'Accept':'application/json'}
-}).then(response => response.json())
-.then(osmJson => {
-  console.log('OSM API response ontvangen, converteren...');
-  const geojson = osmtogeojson(osmJson);
-  const format = new ol.format.GeoJSON();
-  const features = format.readFeatures(geojson, {
-    dataProjection: 'EPSG:4326',
-    featureProjection: 'EPSG:3857'
   });
-  console.log('Features aangeleverd:', features.length);
-  vectorSource.clear();
-  vectorSource.addFeatures(features);
-}).catch(e=>{
-  console.error('Fout bij laden OSM data:', e);
-});
+
+  const layerSwitcher = new ol.control.LayerSwitcher();
+  map.addControl(layerSwitcher);
+
+  const popupContainer = document.getElementById('popup');
+  const popupOverlay = new ol.Overlay({
+    element: popupContainer,
+    positioning: 'bottom-center',
+    stopEvent: false,
+    offset: [0, -10]
+  });
+  map.addOverlay(popupOverlay);
+
+  map.on('singleclick', evt => {
+    console.log('Kaart geklikt op', evt.coordinate);
+    popupOverlay.setPosition(undefined);
+    popupContainer.style.display = 'none';
+
+    const features = [];
+    map.forEachFeatureAtPixel(evt.pixel, feature => features.push(feature));
+    console.log('Features op pixel:', features.length);
+
+    if(features.length === 0) return;
+
+    for(const feature of features){
+      const tags = feature.get('tags')||{};
+      console.log('Feature tags bij click:', tags);
+
+      // Turf hole detectie
+      const geom = feature.getGeometry();
+      if(!geom) {
+        console.warn('Geen geometrie');
+        continue;
+      }
+      const coords = geom.clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
+      let turfGeom = null;
+      if(geom.getType()==='Polygon') turfGeom = turf.polygon(coords);
+      else if(geom.getType()==='MultiPolygon') turfGeom = turf.multiPolygon(coords);
+      if(turfGeom){
+        const pnt = turf.point(ol.proj.toLonLat(evt.coordinate));
+        let inHole = false;
+        for(let i=1; i<turfGeom.geometry.coordinates.length; i++){
+          const hole = turf.polygon([turfGeom.geometry.coordinates[i]]);
+          if(turf.booleanPointInPolygon(pnt, hole)){
+            inHole = true;
+            console.log('Klik in hole, negeer');
+            break;
+          }
+        }
+        if(inHole) continue;
+      }
+
+      // OAT API ophalen met debug links
+      const gemeente = tags['kad:gemeente'];
+      const sectie = tags['kad:sectie'];
+      const perceel = tags['kad:perceelnr'];
+      const perceeltvg = tags['kad:perceelnrtvg'] || '';
+
+      if(!gemeente || !sectie || !perceel){
+        console.log('Onvoldoende data: gemeente, sectie of perceel ontbreekt:', gemeente, sectie, perceel);
+        popupContainer.innerHTML = '<p>Onvoldoende perceel data om extra informatie te laden.</p>';
+        popupOverlay.setPosition(evt.coordinate);
+        popupContainer.style.display = 'block';
+        break;
+      }
+
+      const url = `https://oat.hisgis.nl/oat-ws/rest/percelen/${encodeURIComponent(gemeente)}/${encodeURIComponent(sectie)}/${encodeURIComponent(perceel)}${perceeltvg ? '/' + encodeURIComponent(perceeltvg) : ''}`;
+      console.log('OAT URL ophalen:', url);
+
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          console.log('OAT respons:', data);
+          if(data.results && data.results.length){
+            const res=data.results[0];
+            let html=`<h3>Perceel ${gemeente} ${sectie} ${perceel}${perceeltvg ? '/' + perceeltvg : ''}</h3><table><tbody>`;
+            html += `<tr><th>Gebruik</th><td>${res.grondGebruik || 'n.v.t.'}</td></tr>`;
+            html += `<tr><th>Oppervlak</th><td>${res.oppervlak || 'n.v.t.'} m²</td></tr>`;
+            if(res.perceelnrtvg) html += `<tr><th>Perceel TVG</th><td>${res.perceelnrtvg}</td></tr>`;
+            if(res.huisnrs && res.huisnrs.length) html += `<tr><th>Huisnummers</th><td>${res.huisnrs.join(', ')}</td></tr>`;
+            html += '</tbody></table>';
+            popupContainer.innerHTML = html;
+          } else {
+            popupContainer.innerHTML = '<p>Geen extra gegevens beschikbaar.</p>';
+          }
+          popupOverlay.setPosition(evt.coordinate);
+          popupContainer.style.display = 'block';
+        })
+        .catch(e => {
+          console.error('Fout bij laden OAT data:', e);
+          popupContainer.innerHTML = `<p>Fout bij laden perceel info: ${e.message}</p>`;
+          popupOverlay.setPosition(evt.coordinate);
+          popupContainer.style.display = 'block';
+        });
+      break; // slechts 1 popup tegelijk
+    }
+  });
+
+  console.log('OSM API laden...');
+  fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
+    headers: {'Accept':'application/json'}
+  })
+  .then(resp => resp.json())
+  .then(osmJson => {
+    console.log('OSM API respons ontvangen:', osmJson);
+    const geojson = osmtogeojson(osmJson);
+    const format = new ol.format.GeoJSON();
+    const features = format.readFeatures(geojson, {
+      dataProjection:'EPSG:4326',
+      featureProjection:'EPSG:3857'
+    });
+    console.log('Aantal features parsed:', features.length);
+    features.forEach(f => {
+      console.log('Feature properties:', f.getProperties());
+    });
+    vectorSource.clear();
+    vectorSource.addFeatures(features);
+  })
+  .catch(e => {
+    console.error('Fout bij laden OSM data:', e);
+  });
+
 </script>
 </body>
 </html>
