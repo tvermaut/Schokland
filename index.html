@@ -30,40 +30,11 @@
     table.tags th {
       background: #edecfe;
     }
-    dl.details {
-      margin-top: 10px;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-    }
-    dl.details dt {
-      font-weight: bold;
-      margin-top: 4px;
-    }
-    dl.details dd {
-      margin-left: 10px;
-      margin-bottom: 6px;
-    }
     .forest-icon {
       width: 20px; height: 20px;
       background: url('https://cdn-icons-png.flaticon.com/512/4205/4205032.png') no-repeat center center;
       background-size: contain;
       pointer-events: none;
-    }
-    button.oat-scan-btn {
-      background: #4285f4;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      font-weight: bold;
-      font-size: 14px;
-      cursor: pointer;
-      border-radius: 4px;
-      margin-top: 5px;
-      display: inline-block;
-      text-decoration: none;
-    }
-    button.oat-scan-btn:hover {
-      background: #3367d6;
     }
   </style>
 </head>
@@ -72,100 +43,44 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 
-  function includeJs(jsFilePath) {
-    var js = document.createElement("script");
-
-    js.type = "text/javascript";
-    js.src = jsFilePath;
-
-    document.body.appendChild(js);
-}
-
-includeJs("artikel.js");
-
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxNativeZoom: 19,
   maxZoom: 22,
   attribution: '&copy; OpenStreetMap-bijdragers'
 });
-const luchtfoto = L.tileLayer.wms(
-  "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
-    layers: 'Actueel_ortho25',
-    format: 'image/jpeg',
-    tilematrixSet: 'EPSG:3857',
-    transparent: false,
-    maxZoom: 22,
-    attribution: 'Luchtfoto via PDOK'
+const luchtfoto = L.tileLayer.wms("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
+  layers: 'Actueel_ortho25',
+  format: 'image/jpeg',
+  tilematrixSet: 'EPSG:3857',
+  transparent: false,
+  maxZoom: 22,
+  attribution: 'Luchtfoto via PDOK'
 });
 const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
   maxZoom: 22,
   attribution: 'Minuutplan 1832 via Huygens ING'
 });
+
 const map = L.map('map', {
-  center: [52.65, 5.78],
+  center: [52.64, 5.775],
   zoom: 14,
   minZoom: 2,
   maxZoom: 22,
   layers: [luchtfoto]
 });
-const baseLayers = {
+
+L.control.layers({
   "OSM": osm,
   "PDOK Luchtfoto": luchtfoto,
   "Minuutplan 1832": minuutplan
-};
-function styleFeature(f) {
-  const tags = f.properties.tags || {};
-  if (tags.building) return {color: "#a10000", weight: 2, fillColor: "#ff4444", fillOpacity: 0.4};
-  if (tags["natural"] === "water") return {color: "#1380ff", weight: 2, fillColor: "#76aaff", fillOpacity: 0.35};
-  if (tags.landuse === "residential" && !tags.building) return {color: "#888888", weight: 2, fillColor: "#e0e0e0", fillOpacity: 0.2};
-  if (tags.landuse === "meadow") return {color: "#4caf50", weight: 2, fillColor: "#a5d6a7", fillOpacity: 0.4};
-  if (tags.landuse === "forrest") return {color: "#004d00", weight: 2, fillColor: "#003300", fillOpacity: 0.6};
-  if (tags.landuse === "allotments") return {color: "#e6c300", weight: 2, fillColor: "#fff799", fillOpacity: 0.6};
-  if (tags.landuse === "orchard") return {color: "#d97b00", weight: 2, fillColor: "#ffb74d", fillOpacity: 0.6};
-  if (tags.landuse === "farmland") return {color: "#4e342e", weight: 2, fillColor: "#3e2723", fillOpacity: 0.6};
-  if (tags.natural === "sand") return {color: "#d9cbbd", weight: 2, fillColor: "#f4f1e9", fillOpacity: 0.6};
-  return {color: "#000000", weight: 2, fillOpacity: 0.2};
-}
-function tagsTable(tags) {
-  let rows = Object.entries(tags).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-  return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-function buildArtikelLbl(tags) {
-  // Volg logica van https://tvermaut.github.io/hisgis-oat-scan-view/script.js:233
-  // OAT + kad_gemeentecode (max 5 chars, 0 gepad) + sectie (1 char) + perceelnr (3 chars, 0 gepad), plus optioneel perceelnrtvg
-  let gem = (tags['kad:gemeente'] || '').toUpperCase().padStart(5, '0').substring(0,5);
-  let sect = (tags['kad:sectie'] || '').toUpperCase();
-  let perc = (tags['kad:perceelnr'] || '').padStart(3, '0');
-  let lbl = 'OAT' + gem + sect + perc;
-  if (tags['kad:perceelnrtvg']) {
-    lbl += tags['kad:perceelnrtvg'];
-  }
-  return lbl;
-}
-function definitionListFromFirstResult(x) {
-  // bouw dl met Artikel, Soort, Huisnr (indien aanwezig), Oppervlakte, OAT-scan knop
-  perceel = x?.results[0]
-  if (!perceel) return '';
-  let dl = '<dl class="details">';
-  dl += `<dt>Artikel</dt><dd>${getArtikelHTML(x.artikelen[0])}</dd>`;
-  dl += `<dt>Soort</dt><dd>${perceel?.grondGebruik || ''}</dd>`;
-  if (perceel?.huisnrs && perceel?.huisnrs.length > 0) {
-    dl += `<dt>Huisnr</dt><dd>${perceel.huisnrs.join(', ')}</dd>`;
-  }
-  dl += `<dt>Oppervlakte</dt><dd>${perceel?.oppervlak || ''}</dd>`;
-  if (perceel?.oatScan?.code) {
-    let url = 'https://tvermaut.github.io/hisgis-oat-scan-view/?' + perceel?.oatScan.code;
-    dl += `<dt>OAT-scan</dt><dd><a class="oat-scan-btn" href="${url}" target="_blank" rel="noopener">Bekijk OAT-scan</a></dd>`;
-  }
-  dl += '</dl>';
-  return dl;
-}
+}, null, {collapsed: false}).addTo(map);
+
+// Functie voor conversie en weergave multipolygons & ways
 function overpassToGeoJSON(data) {
   const ways = {};
   const features = [];
-  // Verzamel alle ways
-  for(const el of (data.elements || [])) {
-    if(el.type === "way" && Array.isArray(el.geometry)){
+  for (const el of (data.elements || [])) {
+    if (el.type === "way" && Array.isArray(el.geometry)) {
       ways[el.id] = el.geometry.map(pt => [pt.lon, pt.lat]);
       features.push({
         type: "Feature",
@@ -174,150 +89,127 @@ function overpassToGeoJSON(data) {
       });
     }
   }
-  // Voeg multipolygon-relations toe
-  for(const el of (data.elements || [])) {
-    if(el.type === "relation" && el.tags && el.tags.type === "multipolygon") {
-      let outers = [];
-      let inners = [];
-      for(const m of el.members) {
-        if(m.type === "way" && Array.isArray(ways[m.ref])) {
-          if(m.role === "outer") outers.push(ways[m.ref]);
-          if(m.role === "inner") inners.push(ways[m.ref]);
+  for (const el of (data.elements || [])) {
+    if (el.type === "relation" && el.tags && el.tags.type === "multipolygon") {
+      let outers = [], inners = [];
+      for (const m of el.members) {
+        if (m.type === "way" && Array.isArray(ways[m.ref])) {
+          if (m.role === "outer") outers.push(ways[m.ref]);
+          else if (m.role === "inner") inners.push(ways[m.ref]);
         }
       }
-      if(outers.length>0) {
+      if (outers.length > 0) {
         features.push({
           type: "Feature",
-          geometry: (outers.length === 1 && inners.length === 0) ?
-            {type: "Polygon", coordinates: [outers[0], ...inners]} :
-            {type: "MultiPolygon", coordinates: outers.map(outer=>[outer, ...inners])},
+          geometry:
+            (outers.length === 1 && inners.length === 0)
+            ? {type: "Polygon", coordinates: [outers[0], ...inners]}
+            : {type: "MultiPolygon", coordinates: outers.map(outer => [outer, ...inners])},
           properties: {tags: el.tags || {}, id: el.id}
         });
       }
     }
   }
-  return { type: "FeatureCollection", features };
+  return {type: "FeatureCollection", features};
 }
+
+function styleFeature(f) {
+  const tags = f.properties.tags || {};
+  if (tags.building) return {color: '#a10000', weight: 2, fillColor: '#ff4444', fillOpacity: 0.4};
+  if (tags['natural'] === 'water') return {color: '#1380ff', weight: 2, fillColor: '#76aaff', fillOpacity: 0.35};
+  if (tags.landuse === 'residential' && !tags.building) return {color: '#888888', weight: 2, fillColor: '#e0e0e0', fillOpacity: 0.2};
+  if (tags.landuse === 'meadow') return {color: '#4caf50', weight: 2, fillColor: '#a5d6a7', fillOpacity: 0.4};
+  if (tags.landuse === 'forrest') return {color: '#004d00', weight: 2, fillColor: '#003300', fillOpacity: 0.6};
+  if (tags.landuse === 'allotments') return {color: '#e6c300', weight: 2, fillColor: '#fff799', fillOpacity: 0.6};
+  if (tags.landuse === 'orchard') return {color: '#d97b00', weight: 2, fillColor: '#ffb74d', fillOpacity: 0.6};
+  if (tags.landuse === 'farmland') return {color: '#4e342e', weight: 2, fillColor: '#3e2723', fillOpacity: 0.6};
+  if (tags.natural === 'sand') return {color: '#d9cbbd', weight: 2, fillColor: '#f4f1e9', fillOpacity: 0.6};
+  return {color: '#000000', weight: 2, fillOpacity: 0.2};
+}
+
+function tagsTable(tags) {
+  const rows = Object.entries(tags).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 const forestIcon = L.divIcon({
   className: 'forest-icon',
   iconSize: [20, 20],
   interactive: false
 });
 
+let labelMarkers = []; // Om label markers te tracken
 
-L.control.layers(baseLayers, null, {collapsed:false}).addTo(map);
-fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {headers: {'Accept': 'application/json'}})
-  .then(resp => resp.json())
-  .then(data => {
-    let geojsonData;
-    if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
-      geojsonData = data;
-    } else {
-      geojsonData = overpassToGeoJSON(data);
-    }
-    const geojsonLayer = L.geoJSON(geojsonData, {
-      style: styleFeature,
-      onEachFeature: function(feature, layer) {
-        layer.bindPopup("Laden...");
-        layer.on('click', () => {
-          const t = feature.properties.tags;
-          if (t['kad:gemeente'] && t['kad:sectie'] && t['kad:perceelnr']) {
-            let url = 'https://oat.hisgis.nl/oat-ws/rest/percelen/' +
-                      encodeURIComponent(t['kad:gemeente']) + '/' +
-                      encodeURIComponent(t['kad:sectie']) + '/' +
-                      encodeURIComponent(t['kad:perceelnr']);
-            if (t['kad:perceelnrtvg']) {
-              url += '/' + encodeURIComponent(t['kad:perceelnrtvg']);
-            }
-            fetch(url)
-              .then(resp => resp.json())
-              .then(json => {
-                const artikelLbl = buildArtikelLbl(t);
-                const dlHtml = definitionListFromFirstResult(json);
-                const popupHtml = tagsTable(t) + dlHtml;
-                layer.bindPopup(popupHtml).openPopup();
-              })
-              .catch(e => layer.bindPopup('Fout bij ophalen data: ' + e).openPopup());
-          } else {
-            layer.bindPopup(tagsTable(t)).openPopup();
-          }
+function clearLabelMarkers() {
+  labelMarkers.forEach(m => map.removeLayer(m));
+  labelMarkers = [];
+}
+
+fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
+  headers: {'Accept': 'application/json'}
+})
+.then(resp => resp.json())
+.then(data => {
+  const geojsonData = overpassToGeoJSON(data);
+  const geojsonLayer = L.geoJSON(geojsonData, {
+    style: styleFeature,
+    onEachFeature: (feature, layer) => {
+      layer.bindPopup(tagsTable(feature.properties.tags));
+
+      // Voeg bos-icoon toe als landuse=forrest
+      if (feature.properties.tags.landuse === 'forrest') {
+        const coords = feature.geometry.coordinates[0];
+        let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+        coords.forEach(([x,y]) => {
+          if(x<minX) minX=x; if(x>maxX) maxX=x;
+          if(y<minY) minY=y; if(y>maxY) maxY=y;
         });
-        // Init popup nu (zonder dynamic inhoud)
-        layer.bindPopup(tagsTable(feature.properties.tags));
-        if (feature.properties.tags['kad:perceelnr'] && map.getZoom() >= 18) {
-          const coords = feature.geometry.coordinates[0];
-          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-          coords.forEach(([x,y]) => {
-            if(x<minX) minX=x;
-            if(x>maxX) maxX=x;
-            if(y<minY) minY=y;
-            if(y>maxY) maxY=y;
-          });
-          const center = [(minY+maxY)/2, (minX+maxX)/2];
-          L.marker(center, {
-            icon: L.divIcon({className: 'kadastraal-label', iconSize: [60,20], html: feature.properties.tags['kad:perceelnr']}),
-            interactive:false
-          }).addTo(map);
-        }
-        if (feature.properties.tags.landuse === "forrest") {
-          const coords = feature.geometry.coordinates[0];
-          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-          coords.forEach(([x,y]) => {
-            if(x<minX) minX=x;
-            if(x>maxX) maxX=x;
-            if(y<minY) minY=y;
-            if(y>maxY) maxY=y;
-          });
-          const center = [(minY+maxY)/2, (minX+maxX)/2];
-          L.marker(center, {icon: forestIcon, interactive:false}).addTo(map);
-        }
-        layer.bringToFront();
+        const center = [(minY+maxY)/2, (minX+maxX)/2];
+        const marker = L.marker(center, {icon: forestIcon, interactive:false});
+        marker.addTo(map);
+        labelMarkers.push(marker);
       }
-    });
-    geojsonLayer.addTo(map);
-    geojsonLayer.bringToFront();
+    }
+  }).addTo(map);
 
-    map.on('zoomend', () => {
-      const zoom = map.getZoom();
-      map.eachLayer(layer => {
-        if(layer.options && layer.options.icon && (layer.options.icon.options.className === 'kadastraal-label' || layer.options.icon.options.className === 'forest-icon')) {
-          map.removeLayer(layer);
+  // Functie voor het (de)activeren van perceelnummers boven zoom 18
+  function updateLabels() {
+    clearLabelMarkers();
+    if (map.getZoom() >= 18) {
+      geojsonLayer.eachLayer(layer => {
+        const tags = layer.feature.properties.tags;
+        if (tags['kad:perceelnr']) {
+          const coords = layer.feature.geometry.coordinates[0];
+          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+          coords.forEach(([x,y]) => {
+            if(x<minX) minX=x; if(x>maxX) maxX=x;
+            if(y<minY) minY=y; if(y>maxY) maxY=y;
+          });
+          const center = [(minY+maxY)/2, (minX+maxX)/2];
+          const marker = L.marker(center, {
+            icon: L.divIcon({
+              className: 'kadastraal-label',
+              iconSize: [60, 20],
+              html: tags['kad:perceelnr']
+            }),
+            interactive: false
+          });
+          marker.addTo(map);
+          labelMarkers.push(marker);
         }
       });
-      if (zoom >= 18) {
-        geojsonLayer.eachLayer(layer => {
-          const t = layer.feature.properties.tags;
-          if (t['kad:perceelnr']) {
-            const coords = layer.feature.geometry.coordinates[0];
-            let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-            coords.forEach(([x,y]) => {
-              if(x<minX) minX=x;
-              if(x>maxX) maxX=x;
-              if(y<minY) minY=y;
-              if(y>maxY) maxY=y;
-            });
-            const center = [(minY+maxY)/2, (minX+maxX)/2];
-            L.marker(center, {
-              icon: L.divIcon({className: 'kadastraal-label', iconSize: [60,20], html: t['kad:perceelnr']}),
-              interactive:false
-            }).addTo(map);
-          }
-          if (t.landuse === "forrest") {
-            const coords = layer.feature.geometry.coordinates[0];
-            let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-            coords.forEach(([x,y]) => {
-              if(x<minX) minX=x;
-              if(x>maxX) maxX=x;
-              if(y<minY) minY=y;
-              if(y>maxY) maxY=y;
-            });
-            const center = [(minY+maxY)/2, (minX+maxX)/2];
-            L.marker(center, {icon: forestIcon, interactive:false}).addTo(map);
-          }
-        });
-      }
-    });
-  });
+    }
+  }
+
+  map.on('zoomend', updateLabels);
+  updateLabels();
+
+})
+.catch(err => {
+  console.error('Fout bij laden data:', err);
+  alert('Kan data niet laden: ' + err.message);
+});
+
 </script>
 </body>
 </html>
