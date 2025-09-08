@@ -161,15 +161,42 @@ function definitionListFromFirstResult(x) {
   return dl;
 }
 function overpassToGeoJSON(data) {
-  return {
-    type: "FeatureCollection",
-    features: (data.elements || []).filter(el => el.type === "way" && Array.isArray(el.geometry))
-      .map(el => ({
+  const ways = {};
+  const features = [];
+  // Verzamel alle ways
+  for(const el of (data.elements || [])) {
+    if(el.type === "way" && Array.isArray(el.geometry)){
+      ways[el.id] = el.geometry.map(pt => [pt.lon, pt.lat]);
+      features.push({
         type: "Feature",
-        geometry: {type: "Polygon", coordinates: [el.geometry.map(pt => [pt.lon, pt.lat])]},
+        geometry: {type: "Polygon", coordinates: [ways[el.id]]},
         properties: {tags: el.tags || {}, id: el.id}
-      }))
-  };
+      });
+    }
+  }
+  // Voeg multipolygon-relations toe
+  for(const el of (data.elements || [])) {
+    if(el.type === "relation" && el.tags && el.tags.type === "multipolygon") {
+      let outers = [];
+      let inners = [];
+      for(const m of el.members) {
+        if(m.type === "way" && Array.isArray(ways[m.ref])) {
+          if(m.role === "outer") outers.push(ways[m.ref]);
+          if(m.role === "inner") inners.push(ways[m.ref]);
+        }
+      }
+      if(outers.length>0) {
+        features.push({
+          type: "Feature",
+          geometry: (outers.length === 1 && inners.length === 0) ?
+            {type: "Polygon", coordinates: [outers[0], ...inners]} :
+            {type: "MultiPolygon", coordinates: outers.map(outer=>[outer, ...inners])},
+          properties: {tags: el.tags || {}, id: el.id}
+        });
+      }
+    }
+  }
+  return { type: "FeatureCollection", features };
 }
 const forestIcon = L.divIcon({
   className: 'forest-icon',
