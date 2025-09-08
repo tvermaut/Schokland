@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>OpenLayers Kadaster met juiste tariefformat en tabel</title>
+<title>OpenLayers Kadaster met correcte tariefformat en tabel</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol-layerswitcher/dist/ol-layerswitcher.css" />
@@ -51,6 +51,10 @@
     white-space: nowrap;
     pointer-events: none;
     user-select: none;
+  }
+  strong.lowercase {
+    font-weight: normal;
+    text-transform: lowercase;
   }
 </style>
 </head>
@@ -202,19 +206,16 @@
     }
   });
 
-
-  const highlightStyle = feature => {
-    return new ol.style.Style({
-      stroke: new ol.style.Stroke({
-        color: 'rgba(255, 255, 0, 0.7)',
-        width: 10
-      }),
-      fill: new ol.style.Fill({
-        color: 'rgba(255, 255, 0, 0.1)'
-      }),
-      text: createFeatureText(feature)
-    });
-  };
+  const highlightStyle = feature => new ol.style.Style({
+    stroke: new ol.style.Stroke({
+      color: 'rgba(255, 255, 0, 0.7)',
+      width: 10
+    }),
+    fill: new ol.style.Fill({
+      color: 'rgba(255, 255, 0, 0.1)'
+    }),
+    text: createFeatureText(feature)
+  });
 
   function createFeatureText(feature){
     if(map){
@@ -269,16 +270,16 @@
     }
     html += `</tbody></table><h3>OAT Perceelgegevens</h3>`;
 
-    // Bouw tabel met oppervlak en grondGebruik als eerste twee rijen
-    html += `<table><thead><tr><th>Attribuut</th><th>Waarde</th></tr></thead><tbody>`;
+    // Bouw tabel met oppervlak en grondGebruik als eerste twee rijen, klein en niet vet
+    html += `<table><thead><tr><th>attribuut</th><th>waarde</th></tr></thead><tbody>`;
     if(oatTags.oppervlak !== undefined && oatTags.oppervlak !== null){
-      html += `<tr><td><strong>Oppervlak</strong></td><td>${formatOppervlak(oatTags.oppervlak)}</td></tr>`;
+      html += `<tr><td>oppervlak</td><td>${formatOppervlak(oatTags.oppervlak)}</td></tr>`;
     }
     if(oatTags.grondGebruik){
-      html += `<tr><td><strong>Grondgebruik</strong></td><td>${oatTags.grondGebruik}</td></tr>`;
+      html += `<tr><td>grondgebruik</td><td>${oatTags.grondGebruik}</td></tr>`;
     }
 
-    // Overige velden behalve perceelTarieven, oppervlak, grondGebruik
+    // Overige velden zonder perceelTarieven, oppervlak en grondGebruik
     let filteredKeys = Object.keys(oatTags).filter(k =>
       k !== 'oppervlak' && k !== 'grondGebruik' && k !== 'perceelTarieven' &&
       oatTags[k] !== null && oatTags[k] !== undefined && !OAT_HIDE_KEYS.has(k)
@@ -288,13 +289,13 @@
     filteredKeys.forEach(k=>{
       let v = oatTags[k];
       if(k === 'artikelLink'){
-        html += `<tr><td>Artikel</td><td>${createArtikelString(v)}</td></tr>`;
+        html += `<tr><td>artikel</td><td>${createArtikelString(v)}</td></tr>`;
       } else if(k === 'oatScan'){
         try {
           const url = 'https://tvermaut.github.io/hisgis-oat-scan-view/?'+ encodeURIComponent(v.code);
-          html += `<tr><td>Scan</td><td><a href="${url}" target="_blank" rel="noopener noreferrer">Bekijk scan</a></td></tr>`;
+          html += `<tr><td>scan</td><td><a href="${url}" target="_blank" rel="noopener noreferrer">bekijk scan</a></td></tr>`;
         } catch(e) {
-          html += `<tr><td>Scan</td><td>Onbekende scan</td></tr>`;
+          html += `<tr><td>scan</td><td>onbekende scan</td></tr>`;
         }
       } else if(k === 'belastbaar_inkomen'){
         html += `<tr><td>bel.ink.</td><td>${formatFlorijn(v,true)}</td></tr>`;
@@ -302,14 +303,12 @@
         html += `<tr><td>bel.ink.geb.</td><td>${formatFlorijn(v,false)}</td></tr>`;
       } else if(k === 'huisnrs' && (!v.length || v.length === 0)) {
         // negeer lege huisnrs
-      } else{
+      } else {
         html += `<tr><td>${k}</td><td>${v}</td></tr>`;
       }
     });
 
-    html += `</tbody></table>`;
-
-    // PerceelTarieven weergeven als rij(s)
+    // PerceelTarieven in zelfde tabel met conditie bullet/geen bullet
     if(oatTags.perceelTarieven && oatTags.perceelTarieven.length > 0){
       const tariefCount = oatTags.perceelTarieven.length;
       if(tariefCount === 1){
@@ -319,12 +318,13 @@
           const klasse = x.tarief.klasse;
           const op = x.oppervlak;
           const tariefValue = x.tarief.tarief/100;
-          // eindresultaat gedeeld door 100
+          // Eindresultaat nog eens door 100 gedeeld
           const totaal = Math.round(((op/100)*tariefValue*100)/100)/100;
-          html += `<table><tbody><tr><td>tarief</td><td>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</td></tr></tbody></table>`;
+          html += `<tr><td>tarief</td><td>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</td></tr>`;
         }
       } else {
-        html += `<table><tbody><tr><td><strong>tarief</strong></td><td><ul>`;
+        // meerdere tarieven met bullets in <ul> binnen cel
+        html += `<tr><td>tarief</td><td><ul>`;
         oatTags.perceelTarieven.forEach(x => {
           if(x.tarief && x.tarief.tariefsoort && x.tarief.klasse && x.oppervlak && x.tarief.tarief){
             const naam = x.tarief.tariefsoort.naam;
@@ -335,14 +335,16 @@
             html += `<li>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</li>`;
           }
         });
-        html += `</ul></td></tr></tbody></table>`;
+        html += `</ul></td></tr>`;
       }
     }
+
+    html += `</tbody></table>`;
 
     return html;
   }
 
-  map.on('singleclick', evt => {
+  map.on('singleclick', evt=>{
     if(highlightFeature){
       highlightFeature.setStyle(undefined);
       highlightFeature = null;
@@ -355,7 +357,7 @@
       return;
     }
 
-    let selFeature = features.find(f => {
+    let selFeature = features.find(f=>{
       const p = f.getProperties();
       return p['kad:gemeente'] && p['kad:sectie'] && p['kad:perceelnr'];
     });
@@ -400,16 +402,19 @@
     let url = `https://oat.hisgis.nl/oat-ws/rest/percelen/${encodeURIComponent(gemeente)}/${encodeURIComponent(sectie)}/${encodeURIComponent(perceel)}`;
     if(perceeltvg) url += `/${encodeURIComponent(perceeltvg)}`;
 
-    fetch(url).then(resp => {
+    fetch(url)
+    .then(resp=>{
       if(!resp.ok){
         infoDiv.innerHTML = `<p>Fout bij laden gegevens (status ${resp.status}): ${resp.statusText}</p>` + buildPopupTable({}, props);
         throw new Error(`HTTP error ${resp.status}`);
       }
       return resp.json();
-    }).then(data => {
+    })
+    .then(data=>{
       const oatTags = (data.results && data.results.length > 0) ? data.results[0] : {};
       infoDiv.innerHTML = buildPopupTable(oatTags, props);
-    }).catch(e => {
+    })
+    .catch(e=>{
       infoDiv.innerHTML = `<p>Fout bij laden gegevens: ${e.message}</p>` + buildPopupTable({}, props);
       console.error('OAT API error:', e);
     });
@@ -419,8 +424,8 @@
   fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67',{
     headers: {'Accept': 'application/json'}
   })
-  .then(resp => resp.json())
-  .then(osmJson => {
+  .then(resp=>resp.json())
+  .then(osmJson=>{
     const geojson = osmtogeojson(osmJson);
     const format = new ol.format.GeoJSON();
     const features = format.readFeatures(geojson, {
@@ -430,7 +435,7 @@
     vectorSource.clear();
     vectorSource.addFeatures(features);
   })
-  .catch(e => {console.error('Fout bij laden OSM data:', e);});
+  .catch(e=>{console.error('Fout bij laden OSM data:', e);});
 })();
 </script>
 </body>
