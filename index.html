@@ -270,23 +270,26 @@
     }
     html += `</tbody></table><h3>OAT Perceelgegevens</h3>`;
 
-    // Bouw tabel met oppervlak en grondGebruik als eerste twee rijen, klein en niet vet
+    // Bouw tabel met oppervlak, grondgebruik en overige velden
     html += `<table><thead><tr><th>attribuut</th><th>waarde</th></tr></thead><tbody>`;
+
+    // Oppervlak
     if(oatTags.oppervlak !== undefined && oatTags.oppervlak !== null){
       html += `<tr><td>oppervlak</td><td>${formatOppervlak(oatTags.oppervlak)}</td></tr>`;
     }
+    // Grondgebruik
     if(oatTags.grondGebruik){
       html += `<tr><td>grondgebruik</td><td>${oatTags.grondGebruik}</td></tr>`;
     }
 
     // Overige velden zonder perceelTarieven, oppervlak en grondGebruik
-    let filteredKeys = Object.keys(oatTags).filter(k =>
+    const filteredKeys = Object.keys(oatTags).filter(k =>
       k !== 'oppervlak' && k !== 'grondGebruik' && k !== 'perceelTarieven' &&
       oatTags[k] !== null && oatTags[k] !== undefined && !OAT_HIDE_KEYS.has(k)
     );
 
     // Andere attributen toevoegen
-    filteredKeys.forEach(k=>{
+    filteredKeys.forEach(k => {
       let v = oatTags[k];
       if(k === 'artikelLink'){
         html += `<tr><td>artikel</td><td>${createArtikelString(v)}</td></tr>`;
@@ -294,7 +297,7 @@
         try {
           const url = 'https://tvermaut.github.io/hisgis-oat-scan-view/?'+ encodeURIComponent(v.code);
           html += `<tr><td>scan</td><td><a href="${url}" target="_blank" rel="noopener noreferrer">bekijk scan</a></td></tr>`;
-        } catch(e) {
+        } catch(e){
           html += `<tr><td>scan</td><td>onbekende scan</td></tr>`;
         }
       } else if(k === 'belastbaar_inkomen'){
@@ -308,22 +311,18 @@
       }
     });
 
-    // PerceelTarieven in dezelfde tabel met correcte logica
-    if(oatTags.perceelTarieven && oatTags.perceelTarieven.length > 0){
-      const tariefCount = oatTags.perceelTarieven.length;
-      if(tariefCount === 1){
+    // PerceelTarieven in zelfde tabel
+    if(oatTags.perceelTarieven && oatTags.perceelTarieven.length>0){
+      if(oatTags.perceelTarieven.length === 1){
         const x = oatTags.perceelTarieven[0];
         if(x.tarief && x.tarief.tariefsoort && x.tarief.klasse && x.oppervlak && x.tarief.tarief){
           const naam = x.tarief.tariefsoort.naam;
-          const soort = x.tarief.tariefsoort.soort;
           const klasse = x.tarief.klasse;
           const op = x.oppervlak;
           const tariefValue = x.tarief.tarief/100;
+          const typeTarief = x.tarief.tariefsoort.type;
           let totaalStr = '';
-          if(soort === 'GEBOUWD'){
-            totaalStr = '';
-          } else {
-            // alleen formule voor ongebouwd
+          if(typeTarief !== 'GEBOUWD'){
             const totaal = Math.round(((op/100)*tariefValue*100)/100)/100/100;
             totaalStr = ` = &#402;&thinsp;${totaal.toFixed(2)}`;
           }
@@ -334,14 +333,12 @@
         oatTags.perceelTarieven.forEach(x => {
           if(x.tarief && x.tarief.tariefsoort && x.tarief.klasse && x.oppervlak && x.tarief.tarief){
             const naam = x.tarief.tariefsoort.naam;
-            const soort = x.tarief.tariefsoort.soort;
             const klasse = x.tarief.klasse;
             const op = x.oppervlak;
             const tariefValue = x.tarief.tarief/100;
+            const typeTarief = x.tarief.tariefsoort.type;
             let totaalStr = '';
-            if(soort === 'GEBOUWD'){
-              totaalStr = '';
-            } else {
+            if(typeTarief !== 'GEBOUWD'){
               const totaal = Math.round(((op/100)*tariefValue*100)/100)/100/100;
               totaalStr = ` = &#402;&thinsp;${totaal.toFixed(2)}`;
             }
