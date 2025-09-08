@@ -70,8 +70,7 @@
 
   function tagsTable(tags) {
     return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${
-      Object.entries(tags).map(([k,v])=>
-      `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
+      Object.entries(tags).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')
     }</tbody></table>`;
   }
 
@@ -91,13 +90,6 @@
 
   const forestIcon = L.divIcon({className:'forest-icon', iconSize:[20,20], interactive:false});
 
-  let labelMarkers = [];
-
-  function clearLabelMarkers() {
-    labelMarkers.forEach(m => map.removeLayer(m));
-    labelMarkers = [];
-  }
-
   function buildNodesMap(elements) {
     const nodes={};
     elements.forEach(el=>{
@@ -112,7 +104,7 @@
     for(const nid of way.nodes){
       const node=nodesMap[nid];
       if(!node){
-        console.warn('Node niet gevonden id:', nid);
+        console.warn('Node niet gevonden:', nid);
         return null;
       }
       coords.push([node.lon, node.lat]);
@@ -120,25 +112,24 @@
     return coords;
   }
 
-  // We verzamelen de IDs van alle inner members van multipolygonen, zodat we ze kunnen negeren als losse features.
+  // We bepalen alle inner way IDs uit multipolygon relaties - maar negeren ze niet weer als losse features.
   function getInnerWayIds(multipolygons){
-    const innerWayIds=new Set();
+    const innerWaySet=new Set();
     multipolygons.forEach(rel=>{
       if(!rel.members) return;
       rel.members.forEach(m=>{
-        if(m.type==='way' && m.role==='inner'){
-          innerWayIds.add(m.ref);
-        }
+        if(m.type==='way' && m.role==='inner') innerWaySet.add(m.ref);
       });
     });
-    return innerWayIds;
+    return innerWaySet;
   }
 
   function overpassToGeoJSON(data){
-    console.log('Converteer Overpass naar GeoJSON');
+    console.log('Overpass JSON naar GeoJSON converteren');
     const nodesMap=buildNodesMap(data.elements||[]);
     const waysGeo={};
-    const innerWayIds = getInnerWayIds(data.elements.filter(el => el.type==='relation' && el.tags && el.tags.type==='multipolygon'));
+    const multipolygonRels=(data.elements||[]).filter(el=>el.type==='relation' && el.tags && el.tags.type==='multipolygon');
+    const innerWayIds=getInnerWayIds(multipolygonRels);
 
     (data.elements||[]).forEach(el=>{
       if(el.type==='way'){
@@ -151,13 +142,12 @@
 
     (data.elements||[]).forEach(el=>{
       if(el.type==='way' && waysGeo[el.id]){
-        if(innerWayIds.has(el.id)) return; // sla inner ways zonder tags over
-        if(!el.tags || Object.keys(el.tags).length===0) return;  // sla ways zonder tags over
-
+        if(!el.tags || Object.keys(el.tags).length===0) return; // geen tags, niet toevoegen
+        // Laat inner ways tóch zien (geen filtering)
         const coords=waysGeo[el.id];
         const first=coords[0];
         const last=coords[coords.length-1];
-        const isClosed=(first[0]===last[0] && first[1]===last[1]);
+        const isClosed=first[0]===last[0] && first[1]===last[1];
         let geometry=null;
         if(el.tags && el.tags['man_made']==='groyne'){
           geometry={type:'LineString', coordinates: coords};
@@ -166,122 +156,110 @@
         } else {
           geometry={type:'LineString', coordinates: coords};
         }
-        if(geometry) features.push({
+        features.push({
           type:'Feature',
           geometry,
-          properties:{tags:el.tags||{}, id: el.id}
+          properties:{tags: el.tags||{}, id: el.id}
         });
       }
     });
 
-    (data.elements||[]).forEach(el=>{
-      if(el.type==='relation' && el.tags && el.tags.type==='multipolygon'){
-        let outers=[], inners=[];
-        if(!el.members) return;
-        el.members.forEach(mem=>{
-          if(mem.type==='way' && waysGeo[mem.ref]){
-            if(mem.role==='outer') outers.push(waysGeo[mem.ref]);
-            else if(mem.role==='inner') inners.push(waysGeo[mem.ref]);
-          }
-        });
-        if(outers.length){
-          features.push({
-            type:'Feature',
-            geometry:(outers.length===1 && inners.length===0) ? 
-              {type:'Polygon', coordinates: [outers[0], ...inners]} :
-              {type:'MultiPolygon', coordinates: outers.map(outer => [outer, ...inners])},
-            properties: {tags: el.tags||{}, id: el.id}
-          });
+    multipolygonRels.forEach(el=>{
+      let outers=[], inners=[];
+      if(!el.members) return;
+      el.members.forEach(mem=>{
+        if(mem.type==='way' && waysGeo[mem.ref]){
+          if(mem.role==='outer') outers.push(waysGeo[mem.ref]);
+          else if(mem.role==='inner') inners.push(waysGeo[mem.ref]);
         }
+      });
+      if(outers.length){
+        features.push({
+          type:'Feature',
+          geometry:(outers.length===1 && inners.length===0) ? 
+            {type:'Polygon', coordinates: [outers[0], ...inners]} :
+            {type:'MultiPolygon', coordinates: outers.map(outer => [outer, ...inners])},
+          properties: {tags: el.tags||{}, id: el.id}
+        });
       }
     });
 
-    console.log('GeoJSON features totaal:', features.length);
+    console.log('Features totaal:', features.length);
     return {type:'FeatureCollection', features};
   }
 
-  console.log('Start ophalen OSM API data...');
+  let labelMarkers = [];
+  function clearLabelMarkers() {
+    labelMarkers.forEach(m => map.removeLayer(m));
+    labelMarkers = [];
+  }
+  function updateLabels(geojsonLayer) {
+    clearLabelMarkers();
+    if(map.getZoom() < 18) return;
+    geojsonLayer.eachLayer(layer=>{
+      const tags=layer.feature.properties.tags||{};
+      if(tags['kad:perceelnr']){
+        const coords=layer.feature.geometry.coordinates[0];
+        let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
+        coords.forEach(([x,y])=>{
+          if(x<minX) minX=x; if(x>maxX) maxX=x;
+          if(y<minY) minY=y; if(y>maxY) maxY=y;
+        });
+        const center=[(minY+maxY)/2, (minX+maxX)/2];
+        const marker=L.marker(center, {
+          icon: L.divIcon({className:'kadastraal-label', iconSize: [60,20], html: tags['kad:perceelnr']}),
+          interactive: false
+        });
+        marker.addTo(map);
+        labelMarkers.push(marker);
+      }
+    });
+  }
+
+  function tagsPopup(layer){
+    const tags=layer.feature.properties.tags||{};
+    layer.bindPopup(tagsTable(tags));
+  }
+
+  console.log('Start OSM API data laden');
   fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
-    headers: {'Accept': 'application/json'}
+    headers: {'Accept':'application/json'}
   })
   .then(resp=>{
     console.log('Response ontvangen', resp);
-    if(!resp.ok) throw new Error('HTTP error: ' + resp.status);
+    if(!resp.ok) throw new Error('HTTP error: '+resp.status);
     return resp.json();
   })
   .then(data=>{
     console.log('Data geladen en geparsed', data);
     const geojsonData=overpassToGeoJSON(data);
 
-    // Split multipolygonen en overige features voor stapeling
-    const multipolygonFeatures = geojsonData.features.filter(f =>
-      f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'
-    );
-    const otherFeatures = geojsonData.features.filter(f =>
-      !(f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')
-    );
+    // Splits multipolygon en andere features voor juiste laagvolgorde
+    const multipolygonFeatures = geojsonData.features.filter(f => 
+      f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon');
+    const otherFeatures = geojsonData.features.filter(f => 
+      !(f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
 
-    const multipolygonGeoJSON = {type: 'FeatureCollection', features: multipolygonFeatures};
-    const otherGeoJSON = {type: 'FeatureCollection', features: otherFeatures};
+    const multipolygonGeoJSON={type:'FeatureCollection', features:multipolygonFeatures};
+    const otherGeoJSON={type:'FeatureCollection', features:otherFeatures};
 
-    // Eerst multipolygon laag = ondergrond
     const multipolygonLayer = L.geoJSON(multipolygonGeoJSON, {
       style: styleFeature,
-      onEachFeature: (feature, layer) => {
-        layer.bindPopup(tagsTable(feature.properties.tags));
-      }
+      onEachFeature: tagsPopup
     }).addTo(map);
 
-    // Daarna overige features erbovenop
     const otherLayer = L.geoJSON(otherGeoJSON, {
       style: styleFeature,
-      onEachFeature: (feature, layer) => {
-        layer.bindPopup(tagsTable(feature.properties.tags));
-      }
+      onEachFeature: tagsPopup
     }).addTo(map);
 
-    // Perceelnummers tonen vanaf zoom 18
-    let labelMarkers = [];
-    function clearLabelMarkers() {
-      labelMarkers.forEach(m => map.removeLayer(m));
-      labelMarkers = [];
-    }
-    function updateLabels() {
-      clearLabelMarkers();
-      if(map.getZoom() < 18) return;
-      otherLayer.eachLayer(layer => {
-        const tags = layer.feature.properties.tags || {};
-        if(tags['kad:perceelnr']){
-          const coords = layer.feature.geometry.coordinates[0];
-          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-          coords.forEach(([x,y])=>{
-            if(x < minX) minX = x;
-            if(x > maxX) maxX = x;
-            if(y < minY) minY = y;
-            if(y > maxY) maxY = y;
-          });
-          const center = [(minY + maxY)/2, (minX + maxX)/2];
-          const marker = L.marker(center, {
-            icon: L.divIcon({
-              className: 'kadastraal-label',
-              iconSize: [60, 20],
-              html: tags['kad:perceelnr']
-            }),
-            interactive: false
-          });
-          marker.addTo(map);
-          labelMarkers.push(marker);
-        }
-      });
-    }
-    map.on('zoomend', updateLabels);
-    updateLabels();
-
-  }).catch(err=>{
+    updateLabels(otherLayer);
+    map.on('zoomend', () => updateLabels(otherLayer));
+  })
+  .catch(err=>{
     console.error('Fout bij laden data:', err);
-    alert('Kan data niet laden: ' + err.message);
+    alert('Kan data niet laden: '+err.message);
   });
-
 </script>
 </body>
 </html>
