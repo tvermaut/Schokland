@@ -75,8 +75,8 @@ L.control.layers({
   "Minuutplan 1832": minuutplan
 }, null, {collapsed: false}).addTo(map);
 
-// Functie voor conversie en weergave multipolygons & ways
 function overpassToGeoJSON(data) {
+  console.log('Converteer OSM JSON naar GeoJSON...');
   const ways = {};
   const features = [];
   for (const el of (data.elements || [])) {
@@ -110,6 +110,7 @@ function overpassToGeoJSON(data) {
       }
     }
   }
+  console.log(`GeoJSON features gemaakt: ${features.length}`);
   return {type: "FeatureCollection", features};
 }
 
@@ -138,25 +139,30 @@ const forestIcon = L.divIcon({
   interactive: false
 });
 
-let labelMarkers = []; // Om label markers te tracken
+let labelMarkers = [];
 
 function clearLabelMarkers() {
   labelMarkers.forEach(m => map.removeLayer(m));
   labelMarkers = [];
 }
 
+console.log('Start ophalen data van OSM API...');
 fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
   headers: {'Accept': 'application/json'}
 })
-.then(resp => resp.json())
+.then(resp => {
+  console.log('Response van server ontvangen:', resp);
+  if (!resp.ok) throw new Error('HTTP-fout: ' + resp.status);
+  return resp.json();
+})
 .then(data => {
+  console.log('Data geladen en geparsed:', data);
   const geojsonData = overpassToGeoJSON(data);
   const geojsonLayer = L.geoJSON(geojsonData, {
     style: styleFeature,
     onEachFeature: (feature, layer) => {
+      console.log('Feature toegevoegd:', feature.properties.id);
       layer.bindPopup(tagsTable(feature.properties.tags));
-
-      // Voeg bos-icoon toe als landuse=forrest
       if (feature.properties.tags.landuse === 'forrest') {
         const coords = feature.geometry.coordinates[0];
         let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
@@ -172,8 +178,8 @@ fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
     }
   }).addTo(map);
 
-  // Functie voor het (de)activeren van perceelnummers boven zoom 18
   function updateLabels() {
+    console.log('Update labels, zoom:', map.getZoom());
     clearLabelMarkers();
     if (map.getZoom() >= 18) {
       geojsonLayer.eachLayer(layer => {
@@ -196,6 +202,7 @@ fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
           });
           marker.addTo(map);
           labelMarkers.push(marker);
+          console.log('Perceelnummer getoond:', tags['kad:perceelnr']);
         }
       });
     }
