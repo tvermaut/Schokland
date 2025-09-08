@@ -2,322 +2,253 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>Schokland</title>
+<title>OpenLayers Kadastrale Kaart</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <style>
-  html, body { height: 100%; margin:0; padding:0; }
-  #map { height: 100vh; width: 100vw; }
-  .kadastraal-label {
-    font-weight: bold;
-    color: #a10000;
-    text-align: center;
-    font-size: 14px;
-    text-shadow: 1px 1px 3px white, -1px -1px 3px white;
+  html, body, #map {
+    margin:0; padding:0; width:100%; height:100%;
+  }
+  .ol-popup {
+    position: absolute;
+    background-color: white;
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    bottom: 12px;
+    left: -50px;
+    min-width: 200px;
+  }
+  .ol-popup:after, .ol-popup:before {
+    top: 100%;
+    border: solid transparent;
+    content: " ";
+    height: 0;
+    width: 0;
+    position: absolute;
     pointer-events: none;
   }
-  table.tags {
-    border-collapse: collapse;
-    width: 100%;
+  .ol-popup:after {
+    border-top-color: white;
+    border-width: 10px;
+    left: 48px;
+    margin-left: -10px;
   }
-  table.tags td, table.tags th {
-    border: 1px solid #ccc;
-    padding: 4px 8px;
-    text-align: left;
-    background: #faf9fa;
-  }
-  table.tags th {
-    background: #edecfe;
+  .ol-popup:before {
+    border-top-color: #ccc;
+    border-width: 11px;
+    left: 48px;
+    margin-left: -11px;
   }
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="popup" class="ol-popup" style="display:none;"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ol@7.3.0/dist/ol.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
 <script>
-  // Basis kaartlagen en init
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxNativeZoom: 19, maxZoom: 22, attribution: '&copy; OpenStreetMap-bijdragers'
+  // Basiskaart OSM
+  const map = new ol.Map({
+    target: 'map',
+    layers: [
+      new ol.layer.Tile({
+        source: new ol.source.OSM()
+      })
+    ],
+    view: new ol.View({
+      center: ol.proj.fromLonLat([5.775, 52.64]),
+      zoom: 14
+    })
   });
-  const luchtfoto = L.tileLayer.wms("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
-    layers: 'Actueel_ortho25', format: 'image/jpeg', tilematrixSet: 'EPSG:3857', transparent: false,
-    maxZoom: 22, attribution: 'Luchtfoto via PDOK'
+
+  // Popup div
+  const popupContainer = document.getElementById('popup');
+
+  // Popup overlay
+  const popupOverlay = new ol.Overlay({
+    element: popupContainer,
+    positioning: 'bottom-center',
+    stopEvent: false,
+    offset: [0, -10]
   });
-  const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
-    maxZoom: 22, attribution: 'Minuutplan 1832 via Huygens ING'
-  });
+  map.addOverlay(popupOverlay);
 
-  const map = L.map('map', {
-    center: [52.64, 5.775],
-    zoom: 14,
-    minZoom: 2,
-    maxZoom: 22,
-    layers: [luchtfoto]
-  });
-  L.control.layers({
-    "OSM": osm,
-    "PDOK Luchtfoto": luchtfoto,
-    "Minuutplan 1832": minuutplan
-  }, null, { collapsed: false }).addTo(map);
-
-  function tagsTable(tags) {
-    return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${
-      Object.entries(tags).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
-    }</tbody></table>`;
-  }
-
-  function styleFeature(f) {
-    const t = f.properties.tags || {};
-    if (t.building) return { color: '#a10000', weight: 2, fillColor: '#ff4444', fillOpacity: 0.4 };
-    if (t.natural === 'water') return { color: '#1380ff', weight: 2, fillColor: '#76aaff', fillOpacity: 0.35 };
-    if (t.landuse === 'residential' && !t.building) return { color: '#888888', weight: 2, fillColor: '#e0e0e0', fillOpacity: 0.2 };
-    if (t.landuse === 'meadow') return { color: '#4caf50', weight: 2, fillColor: '#a5d6a7', fillOpacity: 0.4 };
-    if (t.landuse === 'forrest') return { color: '#004d00', weight: 2, fillColor: '#003300', fillOpacity: 0.6 };
-    if (t.landuse === 'allotments') return { color: '#e6c300', weight: 2, fillColor: '#fff799', fillOpacity: 0.6 };
-    if (t.landuse === 'orchard') return { color: '#d97b00', weight: 2, fillColor: '#ffb74d', fillOpacity: 0.6 };
-    if (t.landuse === 'farmland') return { color: '#4e342e', weight: 2, fillColor: '#3e2723', fillOpacity: 0.6 };
-    if (t.natural === 'sand') return { color: '#d9cbbd', weight: 2, fillColor: '#f4f1e9', fillOpacity: 0.6 };
-    return { color: '#000000', weight: 2, fillOpacity: 0.2 };
-  }
-
-  let labelMarkers = [];
-  function clearLabelMarkers() {
-    labelMarkers.forEach(marker => map.removeLayer(marker));
-    labelMarkers = [];
-  }
-
-  function updateLabels(geojsonLayer) {
-    clearLabelMarkers();
-    if (map.getZoom() < 18) {
-      console.log("Zoom te laag, geen labels");
-      return;
+  // Functie om popup content te maken uit tags object
+  function createPopupContent(tags) {
+    if(!tags) return '';
+    let html = '<table><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>';
+    for(const [k,v] of Object.entries(tags)){
+      html += `<tr><td>${k}</td><td>${v}</td></tr>`;
     }
-    geojsonLayer.eachLayer(layer => {
-      if (!layer.feature || !layer.feature.properties) {
-        console.log("Geen feature of properties in laag");
-        return;
-      }
-      const tags = layer.feature.properties.tags || {};
-      // Compose label text
-      let labelText = tags['kad:perceelnr'] || "";
-      if (tags['kad:perceelnrtvg']) {
-        labelText += "/" + tags['kad:perceelnrtvg'];
-      }
-      if (!labelText) {
-        console.log("Geen relevante tags voor label");
-        return;
-      }
-      console.log("Label tonen:", labelText);
+    html += '</tbody></table>';
+    return html;
+  }
 
-      // Bepaal centraal punt voor label
-      let coords = [];
-      const t = layer.feature.geometry.type;
-      if (t === "Polygon") coords = layer.feature.geometry.coordinates[0];
-      else if (t === "MultiPolygon") coords = layer.feature.geometry.coordinates[0][0];
-      else if (t === "LineString") coords = layer.feature.geometry.coordinates;
-      if (coords.length === 0) return;
-
-      let minX = coords[0][0], maxX = coords[0][0], minY = coords[0][1], maxY = coords[0][1];
-      coords.forEach(([x, y]) => {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      });
-      const center = [(minY + maxY) / 2, (minX + maxX) / 2];
-
-      const marker = L.marker(center, {
-        icon: L.divIcon({
-          className: "kadastraal-label",
-          iconSize: [80, 20],
-          html: labelText,
+  // Style functie met label
+  function featureStyle(feature, resolution) {
+    const tags = feature.get('tags') || {};
+    let labelText = '';
+    if(tags['kad:perceelnr']){
+      labelText = tags['kad:perceelnr'];
+      if(tags['kad:perceelnrtvg']){
+        labelText += '/' + tags['kad:perceelnrtvg'];
+      }
+    }
+    // Alleen labels tonen bij zoom > ~18 (je kunt resolutie vergelijken)
+    const showLabel = map.getView().getZoom() >= 18;
+    return [
+      new ol.style.Style({
+        fill: new ol.style.Fill({
+          color: 'rgba(255, 0, 0, 0.2)'
         }),
-        interactive: false,
+        stroke: new ol.style.Stroke({
+          color: '#a10000',
+          width: 2
+        }),
+        text: new ol.style.Text({
+          font: 'bold 14px Calibri,sans-serif',
+          text: showLabel ? labelText : '',
+          fill: new ol.style.Fill({color: '#a10000'}),
+          stroke: new ol.style.Stroke({color: 'white', width: 3}),
+          overflow: true
+        })
+      })
+    ];
+  }
+
+  // GeoJSON laden en vectorlaag aanmaken
+  fetch('JOUW_GEOJSON_URL_HIER.json')
+  .then(resp => resp.json())
+  .then(geojson => {
+    const vectorSource = new ol.source.Vector({
+      features: new ol.format.GeoJSON().readFeatures(geojson, {
+        featureProjection: 'EPSG:3857' // Zorg juiste projectie
+      })
+    });
+
+    const vectorLayer = new ol.layer.Vector({
+      source: vectorSource,
+      style: featureStyle
+    });
+
+    map.addLayer(vectorLayer);
+
+    // Klik event handler met Turf.js om binnen hole te detecteren
+    map.on('singleclick', function(evt) {
+      popupOverlay.setPosition(undefined);
+      popupContainer.style.display = 'none';
+
+      const clickedFeatures = [];
+      map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+        clickedFeatures.push(feature);
       });
-      marker.addTo(map);
-      labelMarkers.push(marker);
-    });
-  }
 
-  function buildNodesMap(elements) {
-    const nodes = {};
-    elements.forEach(el => {
-      if (el.type === "node") nodes[el.id] = { lat: el.lat, lon: el.lon };
-    });
-    return nodes;
-  }
+      if(clickedFeatures.length === 0) return;
 
-  function buildWayGeometry(nodesMap, way) {
-    if (!way.nodes) return null;
-    const coords = [];
-    for (const nid of way.nodes) {
-      const node = nodesMap[nid];
-      if (!node) {
-        console.warn("Node niet gevonden:", nid);
-        return null;
-      }
-      coords.push([node.lon, node.lat]);
-    }
-    return coords;
-  }
+      // Prioriteit gevend aan ways die niet binnen a hole zijn
+      for(const feat of clickedFeatures){
+        const geom = feat.getGeometry();
+        const geojsonGeom = feat.getGeometry().clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
 
-  function getInnerWayIds(multipolygons) {
-    const innerWaySet = new Set();
-    multipolygons.forEach(rel => {
-      if (!rel.members) return;
-      rel.members.forEach(m => {
-        if (m.type === "way" && m.role === "inner") innerWaySet.add(m.ref);
-      });
-    });
-    return innerWaySet;
-  }
+        // Turf expect coordinates as array in lon,lat order
+        let coordinates = feat.getGeometry().clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
 
-  function overpassToGeoJSON(data) {
-    const nodesMap = buildNodesMap(data.elements || []);
-    const waysGeo = {};
-    const multipolygonRels = (data.elements || []).filter(
-      el => el.type === "relation" && el.tags && el.tags.type === "multipolygon"
-    );
-    const innerWayIds = getInnerWayIds(multipolygonRels);
+        const tags = feat.get('tags') || {};
+        let geojsonForTurf = null;
 
-    (data.elements || []).forEach(el => {
-      if (el.type === "way") {
-        const geom = buildWayGeometry(nodesMap, el);
-        if (geom) waysGeo[el.id] = geom;
-      }
-    });
-
-    const features = [];
-
-    (data.elements || []).forEach(el => {
-      if (el.type === "way" && waysGeo[el.id]) {
-        if (!el.tags || Object.keys(el.tags).length === 0) return;
-        const coords = waysGeo[el.id];
-        const first = coords[0];
-        const last = coords[coords.length - 1];
-        const isClosed = first[0] === last[0] && first[1] === last[1];
-        let geometry = null;
-        if (el.tags && el.tags["man_made"] === "groyne") {
-          geometry = { type: "LineString", coordinates: coords };
-        } else if (isClosed) {
-          geometry = { type: "Polygon", coordinates: [coords] };
-        } else {
-          geometry = { type: "LineString", coordinates: coords };
+        if(geom.getType() === 'Polygon'){
+          geojsonForTurf = turf.polygon(coordinates);
+        } else if(geom.getType() === 'MultiPolygon'){
+          geojsonForTurf = turf.multiPolygon(coordinates);
         }
-        features.push({ type: "Feature", geometry, properties: { tags: el.tags, id: el.id } });
-      }
-    });
 
-    multipolygonRels.forEach(el => {
-      let outers = [],
-        inners = [];
-      if (!el.members) return;
-      el.members.forEach(mem => {
-        if (mem.type === "way" && waysGeo[mem.ref]) {
-          if (mem.role === "outer") outers.push(waysGeo[mem.ref]);
-          else if (mem.role === "inner") inners.push(waysGeo[mem.ref]);
-        }
-      });
-      if (outers.length) {
-        features.push({
-          type: "Feature",
-          geometry:
-            outers.length === 1 && inners.length === 0
-              ? { type: "Polygon", coordinates: [outers[0]] }
-              : { type: "MultiPolygon", coordinates: outers.map(outer => [outer]) },
-          properties: { tags: el.tags || {}, id: el.id },
-        });
-      }
-    });
+        if(geojsonForTurf){
+          const clickPoint = turf.point(ol.proj.toLonLat(evt.coordinate));
+          let inHole = false;
+          const polyCoords = (geom.getType()==='Polygon') ? coordinates : (coordinates.length ? coordinates : []);
 
-    return { type: "FeatureCollection", features };
-  }
-
-  let multipolygonWayIds = new Set();
-
-  function onFeatureClick(e) {
-    const layer = e.target;
-    if (!layer || !layer.feature) return;
-    const feature = layer.feature;
-    if (!feature.geometry) return;
-
-    const clickPoint = [e.latlng.lng, e.latlng.lat];
-    const geomType = feature.geometry.type;
-
-    if (geomType === "Polygon" || geomType === "MultiPolygon") {
-      const pts = turf.point(clickPoint);
-      // Kijk of klik binnen een hole valt
-      for (let polygonCoords of feature.geometry.coordinates) {
-        if (polygonCoords.length > 1) {
-          for (let i = 1; i < polygonCoords.length; i++) {
-            let holePolygon = turf.polygon([polygonCoords[i]]);
-            if (turf.booleanPointInPolygon(pts, holePolygon, { ignoreBoundary: true })) {
-              console.log("Klik binnen hole, popup niet tonen");
-              return;
+          if(Array.isArray(polyCoords)){
+            for(let i=0; i<polyCoords.length; i++){
+              // first ring is outer, others holes
+              if(i===0) continue;
+              const holePoly = turf.polygon([polyCoords[i]]);
+              if(turf.booleanPointInPolygon(clickPoint, holePoly)){
+                inHole = true;
+                break;
+              }
             }
           }
+          if(inHole){
+            console.log('Klik in hole, negeer feature');
+            continue; // negeer
+          } else {
+            showPopupForFeature(feat, evt.coordinate);
+            return;
+          }
+        } else {
+          // geen polygon/multipolygon, toon popup
+          showPopupForFeature(feat, evt.coordinate);
+          return;
         }
       }
-    }
-    // Popup tonen
-    layer.openPopup();
-    console.log("Popup getoond voor feature id", feature.properties.id);
-  }
 
-  function onEachFeature(feature, layer) {
-    if (!feature || !feature.properties) return;
-    layer.bindPopup(tagsTable(feature.properties.tags || {}));
-    layer.on("click", onFeatureClick);
-  }
-
-  console.log("Start data laden...");
-  fetch("https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67", {
-    headers: { Accept: "application/json" },
-  })
-    .then(resp => {
-      if (!resp.ok) throw new Error("HTTP error " + resp.status);
-      return resp.json();
-    })
-    .then(data => {
-      multipolygonWayIds = new Set();
-      (data.elements || [])
-        .filter(e => e.type === "relation" && e.tags && e.tags.type === "multipolygon")
-        .forEach(rel => {
-          if (!rel.members) return;
-          rel.members.forEach(mem => {
-            if (mem.type === "way") multipolygonWayIds.add(mem.ref);
-          });
-        });
-
-      const geojsonData = overpassToGeoJSON(data);
-      const multipolygonFeatures = geojsonData.features.filter(
-        f => f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon"
-      );
-      const otherFeatures = geojsonData.features.filter(
-        f => !(f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
-      );
-      const multipolygonGeoJSON = { type: "FeatureCollection", features: multipolygonFeatures };
-      const otherGeoJSON = { type: "FeatureCollection", features: otherFeatures };
-
-      const multipolygonLayer = L.geoJSON(multipolygonGeoJSON, {
-        style: styleFeature,
-        onEachFeature: onEachFeature,
-      }).addTo(map);
-      const otherLayer = L.geoJSON(otherGeoJSON, {
-        style: styleFeature,
-        onEachFeature: onEachFeature,
-      }).addTo(map);
-
-      updateLabels(otherLayer);
-      map.on("zoomend", () => updateLabels(otherLayer));
-    })
-    .catch(err => {
-      console.error("Fout bij laden data:", err);
-      alert("Kan data niet laden: " + err.message);
+      // fallback geen feature tonen
+      console.log('Geen feature popup getoond, mogelijk click in hole');
     });
+
+    function showPopupForFeature(feature, coordinate){
+      const tags = feature.get('tags') || {};
+      const content = createPopupContent(tags);
+      if(content){
+        popupContainer.innerHTML = content;
+        popupOverlay.setPosition(coordinate);
+        popupContainer.style.display = 'block';
+        console.log('Popup getoond met tags:', tags);
+      }
+    }
+
+    // Update labels bij zoom wijziging (force style update)
+    map.getView().on('change:resolution', () => {
+      vectorLayer.setStyle(featureStyle);
+      updateLabels(vectorSource);
+    });
+
+    // Markerlabels bovenop features als aparte markers
+    function updateLabels(source){
+      clearLabelMarkers();
+      if(map.getView().getZoom()<18) return;
+      source.getFeatures().forEach(feature => {
+        const tags = feature.get('tags') || {};
+        let labelText = tags['kad:perceelnr'] || '';
+        if(tags['kad:perceelnrtvg']) labelText += '/' + tags['kad:perceelnrtvg'];
+        if(!labelText) return;
+
+        // Plaats label in geometrie centrum (gebruik getExtent)
+        const ext = feature.getGeometry().getExtent();
+        const center = ol.extent.getCenter(ext);
+
+        const labelMarker = new ol.Overlay({
+          position: center,
+          element: createLabelElement(labelText),
+          stopEvent: false
+        });
+        labelMarker.setMap(map);
+        labelMarkers.push(labelMarker);
+      });
+    }
+
+    function createLabelElement(text){
+      const div = document.createElement('div');
+      div.className = 'kadastraal-label';
+      div.textContent = text;
+      return div;
+    }
+  })
+  .catch(e => {
+    console.error('Fout bij laden GeoJSON:', e);
+  });
 </script>
 </body>
 </html>
