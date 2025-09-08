@@ -70,8 +70,7 @@
 
   function tagsTable(tags) {
     return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${
-      Object.entries(tags).map(([k,v])=>
-      `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
+      Object.entries(tags).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')
     }</tbody></table>`;
   }
 
@@ -98,6 +97,7 @@
     });
     return nodes;
   }
+
   function buildWayGeometry(nodesMap, way) {
     if(!way.nodes) return null;
     const coords=[];
@@ -112,6 +112,7 @@
     return coords;
   }
 
+  // Haal inner ways op (niet negeren, maar voor filter > popup > weergave gebruiken)
   function getInnerWayIds(multipolygons) {
     const innerWaySet = new Set();
     multipolygons.forEach(rel => {
@@ -121,6 +122,28 @@
       });
     });
     return innerWaySet;
+  }
+
+  // Filter inner boundaries weg uit stijl maar niet uit features lijst
+  function styleFeatureFiltered(f) {
+    if (!f || !f.geometry || !f.geometry.coordinates) return {};
+    // Filter de lijnen van inner boundaries van multipolygon
+    const tags = f.properties.tags || {};
+    const geomType = f.geometry.type;
+    if (geomType === "Polygon" || geomType === "MultiPolygon") {
+      // Bij Polygon en MultiPolygon renderen we alle keer alleen de outer rings voor rand
+      // We vermijden teken van inner rings randen hier, door fillOpacity maar geen stroke
+      return {
+        color: tags.building ? '#a10000' : '#000000',
+        weight: 2,
+        fillColor: styleFeature(f).fillColor,
+        fillOpacity: styleFeature(f).fillOpacity,
+        stroke: true,
+        dashArray: null
+      };
+    }
+    // Voor LineString en andere types gewoon standaard style
+    return styleFeature(f);
   }
 
   function overpassToGeoJSON(data) {
@@ -140,8 +163,8 @@
 
     (data.elements || []).forEach(el => {
       if (el.type === 'way' && waysGeo[el.id]){
-        if (!el.tags || Object.keys(el.tags).length === 0) return;
-        // Vergeet inner ways niet tonen!
+        if (!el.tags || Object.keys(el.tags).length === 0) return; // Filter lege tags out
+        // Nested/inner ways niet verwijderen omdat we ze willen tonen
         const coords = waysGeo[el.id];
         const first = coords[0];
         const last = coords[coords.length - 1];
@@ -154,9 +177,7 @@
         } else {
           geometry = {type: 'LineString', coordinates: coords};
         }
-        if(geometry) {
-          features.push({type: 'Feature', geometry, properties: {tags: el.tags, id: el.id}});
-        }
+        features.push({type: 'Feature', geometry, properties: {tags: el.tags, id: el.id}});
       }
     });
 
@@ -169,12 +190,12 @@
           else if(mem.role === 'inner') inners.push(waysGeo[mem.ref]);
         }
       });
-      if(outers.length) {
+      if(outers.length){
         features.push({
           type: 'Feature',
-          geometry: (outers.length === 1 && inners.length === 0) ?
-            {type: 'Polygon', coordinates: [outers[0], ...inners]} :
-            {type: 'MultiPolygon', coordinates: outers.map(outer => [outer, ...inners])},
+          geometry: outers.length === 1 && inners.length === 0 ?
+            {type:'Polygon', coordinates: [outers[0]]} : // inner rings niet params, alleen outer
+            {type:'MultiPolygon', coordinates: outers.map(outer => [outer])},
           properties: {tags: el.tags || {}, id: el.id}
         });
       }
@@ -196,17 +217,29 @@
       if(!layer || !layer.feature || !layer.feature.properties) return;
       const tags = layer.feature.properties.tags || {};
       if(tags['kad:perceelnr']){
-        const coords = layer.feature.geometry.coordinates[0];
+        // Uitpakken coords afhankelijk van geometry type
+        let coords = [];
+        if(layer.feature.geometry.type === 'Polygon'){
+          coords = layer.feature.geometry.coordinates[0];
+        } else if(layer.feature.geometry.type === 'MultiPolygon'){
+          coords = layer.feature.geometry.coordinates[0][0];
+        } else if (layer.feature.geometry.type === 'LineString') {
+          coords = layer.feature.geometry.coordinates;
+        }
+        if(coords.length === 0) return;
+
         let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-        coords.forEach(([x,y])=>{
-          if(x<minX) minX=x; if(x>maxX) maxX=x;
-          if(y<minY) minY=y; if(y>maxY) maxY=y;
+        coords.forEach(([x,y]) => {
+          if(x<minX) minX = x;
+          if(x>maxX) maxX = x;
+          if(y<minY) minY = y;
+          if(y>maxY) maxY = y;
         });
         const center = [(minY+maxY)/2, (minX+maxX)/2];
         const marker = L.marker(center, {
           icon: L.divIcon({
             className: 'kadastraal-label',
-            iconSize: [60, 20],
+            iconSize: [60,20],
             html: tags['kad:perceelnr']
           }),
           interactive: false
@@ -225,7 +258,7 @@
 
   console.log('Start OSM API laden...');
   fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
-    headers:{'Accept':'application/json'}
+    headers: {'Accept':'application/json'}
   })
   .then(resp => {
     console.log('Response ontvangen', resp);
@@ -236,16 +269,17 @@
     console.log('Data geladen en geparsed', data);
     const geojsonData = overpassToGeoJSON(data);
 
-    const multipolygonFeatures = geojsonData.features.filter(f =>
+    // Splits multipolygon en overige features zodat multipolygonen onder liggen
+    const multipolygonFeatures = geojsonData.features.filter(f => 
       f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon');
-    const otherFeatures = geojsonData.features.filter(f =>
+    const otherFeatures = geojsonData.features.filter(f => 
       !(f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
 
-    const multipolygonGeoJSON = {type:'FeatureCollection', features:multipolygonFeatures};
-    const otherGeoJSON = {type:'FeatureCollection', features:otherFeatures};
+    const multipolygonGeoJSON = {type: 'FeatureCollection', features: multipolygonFeatures};
+    const otherGeoJSON = {type: 'FeatureCollection', features: otherFeatures};
 
     const multipolygonLayer = L.geoJSON(multipolygonGeoJSON, {
-      style: styleFeature,
+      style: styleFeatureFiltered,
       onEachFeature: tagsPopup
     }).addTo(map);
 
@@ -256,11 +290,13 @@
 
     updateLabels(otherLayer);
     map.on('zoomend', () => updateLabels(otherLayer));
+
   })
   .catch(err => {
     console.error('Fout bij laden data:', err);
     alert('Kan data niet laden: ' + err.message);
   });
+
 </script>
 </body>
 </html>
