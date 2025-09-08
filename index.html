@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>OpenLayers Kadaster fix tags</title>
+<title>OpenLayers Kadaster met Volledige Stijlen en Debugging</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol-layerswitcher/dist/ol-layerswitcher.css" />
@@ -64,36 +64,73 @@
   });
 
   const vectorSource = new ol.source.Vector();
-
+  
   const vectorLayer = new ol.layer.Vector({
     source: vectorSource,
     title: 'Percelen',
     style: feature => {
-      // Tags nu direct als properties
-      const tags = feature.getProperties();
-      console.log('Feature stijl bepalen, properties:', tags);
+      const props = feature.getProperties();
+      console.log('Stijl bepalen feature properties:', props);
 
-      const building = tags['building'];
-      const natural = tags['natural'];
-      const landuse = tags['landuse'];
-
-      if(building) {
+      if(props.building){
         return new ol.style.Style({
           fill: new ol.style.Fill({color: 'rgba(255,68,68,0.4)'}),
           stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
           text: createFeatureText(feature)
         });
       }
-      if(natural === 'water') {
+      if(props.natural === 'water'){
         return new ol.style.Style({
           fill: new ol.style.Fill({color: 'rgba(118,169,255,0.35)'}),
           stroke: new ol.style.Stroke({color: '#1380ff', width: 2})
         });
       }
-      if(landuse === 'residential' && !building) {
+      if(props.landuse === 'residential' && !props.building){
         return new ol.style.Style({
           fill: new ol.style.Fill({color: 'rgba(136,136,136,0.2)'}),
           stroke: new ol.style.Stroke({color: '#888', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(props.landuse === 'meadow'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(165,214,167,0.4)'}), // groene tint
+          stroke: new ol.style.Stroke({color: '#4caf50', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(props.landuse === 'forrest'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(0,51,0,0.6)'}),
+          stroke: new ol.style.Stroke({color: '#004d00', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(props.landuse === 'allotments'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(255,247,153,0.6)'}),
+          stroke: new ol.style.Stroke({color: '#e6c300', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(props.landuse === 'orchard'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(255,183,77,0.6)'}),
+          stroke: new ol.style.Stroke({color: '#d97b00', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(props.landuse === 'farmland'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(62,39,35,0.6)'}),
+          stroke: new ol.style.Stroke({color: '#4e342e', width: 2}),
+          text: createFeatureText(feature)
+        });
+      }
+      if(props.natural === 'sand'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(244,241,233,0.6)'}),
+          stroke: new ol.style.Stroke({color: '#d9cbbd', width: 2}),
           text: createFeatureText(feature)
         });
       }
@@ -105,7 +142,7 @@
     }
   });
 
-  function createFeatureText(feature) {
+  function createFeatureText(feature){
     if(map){
       const zoom = map.getView().getZoom();
       if(zoom < 18) return null;
@@ -133,6 +170,7 @@
     })
   });
 
+  // Layer switcher control toevoegen
   const layerSwitcher = new ol.control.LayerSwitcher();
   map.addControl(layerSwitcher);
 
@@ -145,64 +183,69 @@
   });
   map.addOverlay(popupOverlay);
 
+  // Popup bij click, met Turf hole detectie en OAT API aanvulling
   map.on('singleclick', evt => {
-    console.log('Kaart geklikt op', evt.coordinate);
+    console.log('Kaart geklikt, coordinate:', evt.coordinate);
     popupOverlay.setPosition(undefined);
     popupContainer.style.display = 'none';
 
     const features = [];
-    map.forEachFeatureAtPixel(evt.pixel, feature => features.push(feature));
-    console.log('Features op pixel:', features.length);
-
+    map.forEachFeatureAtPixel(evt.pixel, feature => {
+      features.push(feature);
+    });
+    console.log('Aantal features op klikpunten:', features.length);
     if(features.length === 0) return;
 
-    for(let feature of features){
+    for(const feature of features){
       const props = feature.getProperties();
-      console.log('Feature properties bij click:', props);
+      console.log('Properties van feature bij click:', props);
 
       const geom = feature.getGeometry();
-      if(!geom){console.warn('Feature zonder geometrie'); continue;}
-
+      if(!geom){
+        console.warn('Geen geometrie aanwezig');
+        continue;
+      }
       const coords = geom.clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
       let turfGeom = null;
       if(geom.getType() === 'Polygon') turfGeom = turf.polygon(coords);
       else if(geom.getType() === 'MultiPolygon') turfGeom = turf.multiPolygon(coords);
 
       if(turfGeom){
-        const pnt = turf.point(ol.proj.toLonLat(evt.coordinate));
-        let insideHole = false;
+        const point = turf.point(ol.proj.toLonLat(evt.coordinate));
+        let inHole = false;
         for(let i=1; i<turfGeom.geometry.coordinates.length; i++){
-          const hole = turf.polygon([turfGeom.geometry.coordinates[i]]);
-          if(turf.booleanPointInPolygon(pnt, hole)){
-            insideHole = true;
-            console.log('Klik in hole, popup negeren');
+          let hole = turf.polygon([turfGeom.geometry.coordinates[i]]);
+          if(turf.booleanPointInPolygon(point, hole)){
+            inHole = true;
+            console.log('Klik binnen hole, popup niet tonen');
             break;
           }
         }
-        if(insideHole) continue;
+        if(inHole) continue;
       }
 
-      // OAT API data laden
+      // Bouw OAT API URL en haal extra info op
       const gemeente = props['kad:gemeente'];
       const sectie = props['kad:sectie'];
       const perceel = props['kad:perceelnr'];
       const perceeltvg = props['kad:perceelnrtvg'] || '';
 
       if(!gemeente || !sectie || !perceel){
-        console.warn('Onvoldoende data:', gemeente, sectie, perceel);
-        popupContainer.innerHTML = '<p>Onvoldoende perceel data voor extra info.</p>';
+        console.warn('Onvoldoende perceelgegevens:', gemeente, sectie, perceel);
+        popupContainer.innerHTML = '<p>Onvoldoende perceelgegevens om extra info op te halen.</p>';
         popupOverlay.setPosition(evt.coordinate);
         popupContainer.style.display = 'block';
         break;
       }
 
-      const url = `https://oat.hisgis.nl/oat-ws/rest/percelen/${encodeURIComponent(gemeente)}/${encodeURIComponent(sectie)}/${encodeURIComponent(perceel)}${perceeltvg ? '/' + encodeURIComponent(perceeltvg) : ''}`;
+      const url = `https://oat.hisgis.nl/oat-ws/rest/percelen/${encodeURIComponent(gemeente)}/${encodeURIComponent(sectie)}/${encodeURIComponent(perceel)}`;
+      if(perceeltvg) url += `/${encodeURIComponent(perceeltvg)}`;
       console.log('OAT API URL:', url);
 
       fetch(url)
-      .then(resp => resp.json())
+      .then(r => r.json())
       .then(data => {
-        console.log('OAT respons:', data);
+        console.log('OAT API response:', data);
         if(data.results && data.results.length){
           const r = data.results[0];
           let html = `<h3>Perceel ${gemeente} ${sectie} ${perceel}${perceeltvg ? '/' + perceeltvg : ''}</h3><table><tbody>`;
@@ -219,37 +262,36 @@
         popupContainer.style.display = 'block';
       })
       .catch(e => {
-        console.error('Fout bij laden OAT data:', e);
-        popupContainer.innerHTML = `<p>Fout bij laden perceel info: ${e.message}</p>`;
+        console.error('Fout bij opladen OAT API data:', e);
+        popupContainer.innerHTML = `<p>Fout bij ophalen gegevens: ${e.message}</p>`;
         popupOverlay.setPosition(evt.coordinate);
         popupContainer.style.display = 'block';
       });
-      break; // popup 1 per click
+      break; // maar één popup tegelijk tonen
     }
   });
 
-  console.log('Laad OSM data...');
-  fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67',{
-    headers: {'Accept':'application/json'}
+  // OSM API data laden en converteren naar GeoJSON
+  console.log('OSM API data wordt geladen...');
+  fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
+    headers: {'Accept': 'application/json'}
   })
   .then(resp => resp.json())
   .then(osmJson => {
-    console.log('OSM JSON ontvangen:', osmJson);
+    console.log('OSM API respons ontvangen:', osmJson);
     const geojson = osmtogeojson(osmJson);
     const format = new ol.format.GeoJSON();
     const features = format.readFeatures(geojson, {
-      dataProjection:'EPSG:4326',
-      featureProjection:'EPSG:3857'
+      dataProjection: 'EPSG:4326',
+      featureProjection: 'EPSG:3857'
     });
-    console.log('Features parsed:', features.length);
-    features.forEach(f => {
-      console.log('Feature properties:', f.getProperties());
-    });
+    console.log('Aantal gedecodeerde features:', features.length);
+    features.forEach(f => console.log('Feature properties:', f.getProperties()));
     vectorSource.clear();
     vectorSource.addFeatures(features);
   })
-  .catch(e =>{
-    console.error('Fout bij laden OSM data:', e);
+  .catch(e => {
+    console.error('Fout tijdens het laden van OSM data:', e);
   });
 </script>
 </body>
