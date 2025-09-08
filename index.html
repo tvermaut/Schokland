@@ -2,43 +2,28 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>OpenLayers Kadaster met scan viewer en uitgebreide info</title>
+<title>OpenLayers Kadaster met uitgebreide OAT info</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol-layerswitcher/dist/ol-layerswitcher.css" />
 <style>
-  html, body {
-    margin:0; padding:0; height: 100%; overflow: hidden;
-    font-family: Arial, sans-serif;
-  }
-  #container {
-    display: flex; height: 100%;
-    width: 100vw;
-  }
-  #map {
-    flex-grow: 1;
-  }
+  html, body { margin:0; padding:0; height: 100%; overflow: hidden; font-family: Arial, sans-serif;}
+  #container { display: flex; height: 100%; width: 100vw; }
+  #map { flex-grow: 1; }
   #info {
-    width: 370px;
-    background: #fff;
-    border-left: 1px solid #ccc;
-    overflow-y: auto;
-    padding: 10px;
+    width: 370px; background: #fff; border-left: 1px solid #ccc;
+    overflow-y: auto; padding: 10px;
   }
-  h2 {
-    margin-top: 0;
-  }
+  h2 { margin-top: 0; }
   table {
-    border-collapse: collapse; width: 100%; margin-bottom: 15px;
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 15px;
   }
-  table, th, td {
-    border: 1px solid #ccc;
-  }
-  th, td {
-    padding: 4px 6px; text-align: left;
-  }
+  table, th, td { border: 1px solid #ccc; }
+  th, td { padding: 4px 6px; text-align: left; }
   .label {
-    background-color: rgba(161, 0, 0, 0.7);
+    background-color: rgba(161,0,0,0.7);
     color: white;
     padding: 2px 5px;
     border-radius: 3px;
@@ -65,7 +50,7 @@
 (() => {
   const OAT_HIDE_KEYS = new Set([
     'importContextNr','accepteer','annotaties','extraperceelnrs','geenGebouw','geschrapt',
-    'grondGebruik','nok','nr','perceelnr','perceelnrtvg','sectie','tvg','artikelLink','oatScan'
+    'nok','nr','perceelnr','perceelnrtvg','sectie','tvg','artikelLink','oatScan'
   ]);
   const OSM_HIDE_KEYS = new Set([
     'timestamp','version','changeset','user','uid','id','geometry'
@@ -76,7 +61,6 @@
     return `Artikel Nr: ${artikelLink.artikelnr || ''}, Reeks: ${artikelLink.reeks || ''}`;
   }
 
-  // Format valuta florijn met 2 decimals, en optioneel weg laten decimals als 00 (voor gebouwd)
   function formatFlorijn(value, alwaysTwoDecimals=true){
     const numberValue = Number(value)/100;
     if(alwaysTwoDecimals) return `&#402;&thinsp;${numberValue.toFixed(2)}`;
@@ -85,7 +69,6 @@
     else return `&#402;&thinsp;${numberValue.toFixed(2)}`;
   }
 
-  // Format oppervlak met thinspace en m²
   function formatOppervlak(value){
     return `${value}\u2009m\u00B2`;
   }
@@ -119,7 +102,6 @@
   const vectorLayer = new ol.layer.Vector({
     source: vectorSource,
     title: 'Percelen',
-    properties: {'title': 'Percelen', 'type': 'overlay'},
     style: feature => {
       const props = feature.getProperties();
       if(props.building) {
@@ -199,7 +181,6 @@
     }
   });
 
-  // Zelfde stijl maar met label ook voor highlight
   const highlightStyle = feature => {
     return new ol.style.Style({
       stroke: new ol.style.Stroke({
@@ -261,6 +242,11 @@
     }
     html += `</tbody></table><h3>OAT Perceelgegevens</h3>`;
 
+    // Voeg grondGebruik toe als die er is in OAT
+    if(oatTags.grondGebruik){
+      html += `<p><strong>Grondgebruik:</strong> ${oatTags.grondGebruik}</p>`;
+    }
+
     if(!oatTags || Object.keys(oatTags).length === 0) {
       html += '<p>Geen extra gegevens beschikbaar.</p>';
     } else {
@@ -288,13 +274,28 @@
           }
         }
       }
+
+      // PerceelTarieven - speciale format
+      if(oatTags.perceelTarieven && oatTags.perceelTarieven.length > 0){
+        html += '<tr><th>PerceelTarief</th><td><ul>';
+        oatTags.perceelTarieven.forEach(x =>{
+          if(x.tarief && x.tarief.tariefsoort && x.tarief.klasse && x.oppervlak && x.tarief.tarief){
+            const naam = x.tarief.tariefsoort.naam;
+            const klasse = x.tarief.klasse;
+            const op = x.oppervlak;
+            const tariefValue = x.tarief.tarief/100;
+            const totaal = Math.round( (op/100) * tariefValue * 100 ) / 100;
+            html += `<li>${naam} - ${klasse} (${op}\u2009m\u00B2 × &#402;&thinsp;${tariefValue} = &#402;&thinsp;${totaal.toFixed(2)})</li>`;
+          }
+        });
+        html += '</ul></td></tr>';
+      }
+
       html += `</tbody></table>`;
     }
-
     return html;
   }
 
-  // Formatteringsfuncties florijn en oppervlak
   function formatFlorijn(value, alwaysTwoDecimals=true){
     const numberValue = Number(value)/100;
     if(alwaysTwoDecimals) return `&#402;&thinsp;${numberValue.toFixed(2)}`;
@@ -322,7 +323,8 @@
     let selFeature = features.find(f => {
       const p = f.getProperties();
       return p['kad:gemeente'] && p['kad:sectie'] && p['kad:perceelnr'];
-    }) || features[0];
+    });
+    if(!selFeature) selFeature = features[0];
 
     highlightFeature = selFeature;
     highlightFeature.setStyle(highlightStyle(selFeature));
@@ -378,7 +380,6 @@
     });
   });
 
-
   console.log('OSM data laden...');
   fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67',{
     headers: {'Accept': 'application/json'}
@@ -396,7 +397,6 @@
   })
   .catch(e => {console.error('Fout bij laden OSM data:', e);});
 })();
-
 </script>
 </body>
 </html>
