@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8" />
-<title>OpenLayers Kadastrale Kaart</title>
+<title>OpenLayers HisGIS OSM API Kadaster</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
 <style>
@@ -39,6 +39,17 @@
     left: 48px;
     margin-left: -11px;
   }
+  .label {
+    background-color: rgba(161, 0, 0, 0.7);
+    color: white;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
 </style>
 </head>
 <body>
@@ -47,26 +58,19 @@
 
 <script src="https://cdn.jsdelivr.net/npm/ol@7.3.0/dist/ol.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/osmtogeojson@3.0.0/osmtogeojson.js"></script>
 
 <script>
-  // Basiskaart OSM
   const map = new ol.Map({
     target: 'map',
-    layers: [
-      new ol.layer.Tile({
-        source: new ol.source.OSM()
-      })
-    ],
+    layers: [new ol.layer.Tile({ source: new ol.source.OSM() })],
     view: new ol.View({
       center: ol.proj.fromLonLat([5.775, 52.64]),
       zoom: 14
     })
   });
 
-  // Popup div
   const popupContainer = document.getElementById('popup');
-
-  // Popup overlay
   const popupOverlay = new ol.Overlay({
     element: popupContainer,
     positioning: 'bottom-center',
@@ -75,180 +79,161 @@
   });
   map.addOverlay(popupOverlay);
 
-  // Functie om popup content te maken uit tags object
-  function createPopupContent(tags) {
-    if(!tags) return '';
+  function tagsTable(tags) {
+    if (!tags) return '';
     let html = '<table><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>';
-    for(const [k,v] of Object.entries(tags)){
+    for (const [k, v] of Object.entries(tags)) {
       html += `<tr><td>${k}</td><td>${v}</td></tr>`;
     }
     html += '</tbody></table>';
     return html;
   }
 
-  // Style functie met label
-  function featureStyle(feature, resolution) {
+  function styleFunction(feature, resolution) {
     const tags = feature.get('tags') || {};
-    let labelText = '';
-    if(tags['kad:perceelnr']){
-      labelText = tags['kad:perceelnr'];
-      if(tags['kad:perceelnrtvg']){
-        labelText += '/' + tags['kad:perceelnrtvg'];
-      }
-    }
-    // Alleen labels tonen bij zoom > ~18 (je kunt resolutie vergelijken)
-    const showLabel = map.getView().getZoom() >= 18;
-    return [
-      new ol.style.Style({
-        fill: new ol.style.Fill({
-          color: 'rgba(255, 0, 0, 0.2)'
-        }),
-        stroke: new ol.style.Stroke({
-          color: '#a10000',
-          width: 2
-        }),
-        text: new ol.style.Text({
-          font: 'bold 14px Calibri,sans-serif',
-          text: showLabel ? labelText : '',
-          fill: new ol.style.Fill({color: '#a10000'}),
-          stroke: new ol.style.Stroke({color: 'white', width: 3}),
-          overflow: true
-        })
+    const fillColor = tags.building ? 'rgba(255, 68, 68, 0.4)' :
+      tags['natural'] === 'water' ? 'rgba(118,169,255,0.35)' :
+      'rgba(255,255,255,0.4)';
+    return new ol.style.Style({
+      fill: new ol.style.Fill({
+        color: fillColor,
+      }),
+      stroke: new ol.style.Stroke({ color: '#a10000', width: 2 }),
+      text: new ol.style.Text({
+        text: map.getView().getZoom() >= 18 ? buildLabelText(feature) : '',
+        font: 'bold 14px sans-serif',
+        fill: new ol.style.Fill({ color: '#a10000' }),
+        stroke: new ol.style.Stroke({ color: 'white', width: 3 }),
+        overflow: true
       })
-    ];
+    });
   }
 
-  // GeoJSON laden en vectorlaag aanmaken
-  fetch('JOUW_GEOJSON_URL_HIER.json')
-  .then(resp => resp.json())
-  .then(geojson => {
-    const vectorSource = new ol.source.Vector({
-      features: new ol.format.GeoJSON().readFeatures(geojson, {
-        featureProjection: 'EPSG:3857' // Zorg juiste projectie
-      })
-    });
+  function buildLabelText(feature) {
+    const tags = feature.get('tags') || {};
+    let label = tags['kad:perceelnr'] || "";
+    if (tags['kad:perceelnrtvg']) {
+      label += '/' + tags['kad:perceelnrtvg'];
+    }
+    return label;
+  }
 
-    const vectorLayer = new ol.layer.Vector({
-      source: vectorSource,
-      style: featureStyle
-    });
+  function createLabelElement(text) {
+    const div = document.createElement('div');
+    div.className = 'label';
+    div.textContent = text;
+    return div;
+  }
 
-    map.addLayer(vectorLayer);
+  const vectorSource = new ol.source.Vector();
+  const vectorLayer = new ol.layer.Vector({
+    source: vectorSource,
+    style: styleFunction
+  });
+  map.addLayer(vectorLayer);
 
-    // Klik event handler met Turf.js om binnen hole te detecteren
-    map.on('singleclick', function(evt) {
-      popupOverlay.setPosition(undefined);
-      popupContainer.style.display = 'none';
-
-      const clickedFeatures = [];
-      map.forEachFeatureAtPixel(evt.pixel, function(feature) {
-        clickedFeatures.push(feature);
+  // Voeg labels als overlay markers toe boven features
+  let labelOverlays = [];
+  function clearLabels() {
+    labelOverlays.forEach(overlay => map.removeOverlay(overlay));
+    labelOverlays = [];
+  }
+  function updateLabels() {
+    clearLabels();
+    if(map.getView().getZoom() < 18) return;
+    vectorSource.getFeatures().forEach(feature => {
+      const labelText = buildLabelText(feature);
+      if(!labelText) return;
+      const extent = feature.getGeometry().getExtent();
+      const center = ol.extent.getCenter(extent);
+      const labelOverlay = new ol.Overlay({
+        element: createLabelElement(labelText),
+        position: center,
+        stopEvent: false,
+        offset: [0, -15]
       });
+      map.addOverlay(labelOverlay);
+      labelOverlays.push(labelOverlay);
+    });
+  }
 
-      if(clickedFeatures.length === 0) return;
+  // Klik event handler met Turf.js om hole detectie toe te passen
+  map.on('singleclick', function (evt) {
+    popupOverlay.setPosition(undefined);
+    popupContainer.style.display = 'none';
 
-      // Prioriteit gevend aan ways die niet binnen a hole zijn
-      for(const feat of clickedFeatures){
-        const geom = feat.getGeometry();
-        const geojsonGeom = feat.getGeometry().clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
+    const coordinate = evt.coordinate;
+    const features = [];
+    map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+      features.push(feature);
+    });
 
-        // Turf expect coordinates as array in lon,lat order
-        let coordinates = feat.getGeometry().clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
+    if(features.length === 0) return;
 
-        const tags = feat.get('tags') || {};
-        let geojsonForTurf = null;
-
-        if(geom.getType() === 'Polygon'){
-          geojsonForTurf = turf.polygon(coordinates);
-        } else if(geom.getType() === 'MultiPolygon'){
-          geojsonForTurf = turf.multiPolygon(coordinates);
-        }
-
-        if(geojsonForTurf){
-          const clickPoint = turf.point(ol.proj.toLonLat(evt.coordinate));
-          let inHole = false;
-          const polyCoords = (geom.getType()==='Polygon') ? coordinates : (coordinates.length ? coordinates : []);
-
-          if(Array.isArray(polyCoords)){
-            for(let i=0; i<polyCoords.length; i++){
-              // first ring is outer, others holes
-              if(i===0) continue;
-              const holePoly = turf.polygon([polyCoords[i]]);
-              if(turf.booleanPointInPolygon(clickPoint, holePoly)){
-                inHole = true;
-                break;
-              }
-            }
-          }
-          if(inHole){
-            console.log('Klik in hole, negeer feature');
-            continue; // negeer
-          } else {
-            showPopupForFeature(feat, evt.coordinate);
-            return;
-          }
-        } else {
-          // geen polygon/multipolygon, toon popup
-          showPopupForFeature(feat, evt.coordinate);
-          return;
-        }
+    for(const feature of features) {
+      const geom = feature.getGeometry();
+      const geoCoords = geom.clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
+      let geojsonGeom;
+      if(geom.getType() === 'Polygon') {
+        geojsonGeom = turf.polygon(geoCoords);
+      } else if(geom.getType() === 'MultiPolygon') {
+        geojsonGeom = turf.multiPolygon(geoCoords);
       }
 
-      // fallback geen feature tonen
-      console.log('Geen feature popup getoond, mogelijk click in hole');
-    });
+      if(geojsonGeom) {
+        const clickPoint = turf.point(ol.proj.toLonLat(coordinate));
+        let insideHole = false;
+        for(let i = 1; i < geojsonGeom.geometry.coordinates.length; i++) {
+          let holePoly = turf.polygon([geojsonGeom.geometry.coordinates[i]]);
+          if(turf.booleanPointInPolygon(clickPoint, holePoly)) {
+            insideHole = true;
+            console.log('Klik binnen hole, geen popup');
+            break;
+          }
+        }
+        if(insideHole) continue;
+      }
 
-    function showPopupForFeature(feature, coordinate){
       const tags = feature.get('tags') || {};
-      const content = createPopupContent(tags);
-      if(content){
+      if(Object.keys(tags).length > 0){
+        const content = tagsTable(tags);
         popupContainer.innerHTML = content;
         popupOverlay.setPosition(coordinate);
         popupContainer.style.display = 'block';
-        console.log('Popup getoond met tags:', tags);
+        console.log('Popup getoond met tags', tags);
+        return; // laat slechts 1 popup zien
       }
     }
-
-    // Update labels bij zoom wijziging (force style update)
-    map.getView().on('change:resolution', () => {
-      vectorLayer.setStyle(featureStyle);
-      updateLabels(vectorSource);
-    });
-
-    // Markerlabels bovenop features als aparte markers
-    function updateLabels(source){
-      clearLabelMarkers();
-      if(map.getView().getZoom()<18) return;
-      source.getFeatures().forEach(feature => {
-        const tags = feature.get('tags') || {};
-        let labelText = tags['kad:perceelnr'] || '';
-        if(tags['kad:perceelnrtvg']) labelText += '/' + tags['kad:perceelnrtvg'];
-        if(!labelText) return;
-
-        // Plaats label in geometrie centrum (gebruik getExtent)
-        const ext = feature.getGeometry().getExtent();
-        const center = ol.extent.getCenter(ext);
-
-        const labelMarker = new ol.Overlay({
-          position: center,
-          element: createLabelElement(labelText),
-          stopEvent: false
-        });
-        labelMarker.setMap(map);
-        labelMarkers.push(labelMarker);
-      });
-    }
-
-    function createLabelElement(text){
-      const div = document.createElement('div');
-      div.className = 'kadastraal-label';
-      div.textContent = text;
-      return div;
-    }
-  })
-  .catch(e => {
-    console.error('Fout bij laden GeoJSON:', e);
   });
+
+  // Data laden van OSM API
+  function loadData(){
+    const bbox = '5.76,52.61,5.79,52.67'; // from query example
+    const url = `https://osm.hisgis.nl/api/0.6/map?bbox=${bbox}`;
+    fetch(url, { headers: {'Accept':'application/json'}})
+    .then(resp => resp.json())
+    .then(osmJson => {
+      // Zet osmJson om naar GeoJSON via osmtogeojson
+      const geojson = osmtogeojson(osmJson);
+      // Transformeer features naar map projectie EPSG:3857
+      const format = new ol.format.GeoJSON();
+      const features = format.readFeatures(geojson, {
+        featureProjection: 'EPSG:3857',
+        dataProjection: 'EPSG:4326'
+      });
+      vectorSource.clear();
+      vectorSource.addFeatures(features);
+      updateLabels();
+    })
+    .catch(e => {
+      console.error('Fout bij laden data:', e);
+    });
+  }
+
+  loadData();
+
+  // Update labels bij zoomwijziging
+  map.getView().on('change:resolution', updateLabels);
 </script>
 </body>
 </html>
