@@ -1,14 +1,27 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
   <title>Schokland</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
   <style>
-    html, body {height: 100%; margin: 0; padding: 0;}
-    #map {height: 100vh; width: 100vw;}
-    .leaflet-container {background: #ddd;}
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #map {
+      height: 100vh;
+      width: 100vw;
+    }
+    .leaflet-container {
+      background: #ddd;
+    }
     .kadastraal-label {
       font-weight: bold;
       color: #a10000;
@@ -21,7 +34,8 @@
       border-collapse: collapse;
       width: 100%;
     }
-    table.tags td, table.tags th {
+    table.tags td,
+    table.tags th {
       border: 1px solid #ccc;
       padding: 4px 8px;
       text-align: left;
@@ -31,192 +45,322 @@
       background: #edecfe;
     }
     .forest-icon {
-      width: 20px; height: 20px;
-      background: url('https://cdn-icons-png.flaticon.com/512/4205/4205032.png') no-repeat center center;
+      width: 20px;
+      height: 20px;
+      background: url("https://cdn-icons-png.flaticon.com/512/4205/4205032.png")
+        no-repeat center center;
       background-size: contain;
       pointer-events: none;
     }
   </style>
 </head>
 <body>
-<div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
+  <div id="map"></div>
 
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxNativeZoom: 19,
-  maxZoom: 22,
-  attribution: '&copy; OpenStreetMap-bijdragers'
-});
-const luchtfoto = L.tileLayer.wms("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?", {
-  layers: 'Actueel_ortho25',
-  format: 'image/jpeg',
-  tilematrixSet: 'EPSG:3857',
-  transparent: false,
-  maxZoom: 22,
-  attribution: 'Luchtfoto via PDOK'
-});
-const minuutplan = L.tileLayer('https://tileserver.huc.knaw.nl/{z}/{x}/{y}', {
-  maxZoom: 22,
-  attribution: 'Minuutplan 1832 via Huygens ING'
-});
-
-const map = L.map('map', {
-  center: [52.64, 5.775],
-  zoom: 14,
-  minZoom: 2,
-  maxZoom: 22,
-  layers: [luchtfoto]
-});
-
-L.control.layers({
-  "OSM": osm,
-  "PDOK Luchtfoto": luchtfoto,
-  "Minuutplan 1832": minuutplan
-}, null, {collapsed: false}).addTo(map);
-
-function overpassToGeoJSON(data) {
-  console.log('Converteer OSM JSON naar GeoJSON...');
-  const ways = {};
-  const features = [];
-  for (const el of (data.elements || [])) {
-    if (el.type === "way" && Array.isArray(el.geometry)) {
-      ways[el.id] = el.geometry.map(pt => [pt.lon, pt.lat]);
-      features.push({
-        type: "Feature",
-        geometry: {type: "Polygon", coordinates: [ways[el.id]]},
-        properties: {tags: el.tags || {}, id: el.id}
-      });
-    }
-  }
-  for (const el of (data.elements || [])) {
-    if (el.type === "relation" && el.tags && el.tags.type === "multipolygon") {
-      let outers = [], inners = [];
-      for (const m of el.members) {
-        if (m.type === "way" && Array.isArray(ways[m.ref])) {
-          if (m.role === "outer") outers.push(ways[m.ref]);
-          else if (m.role === "inner") inners.push(ways[m.ref]);
-        }
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const osm = L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxNativeZoom: 19,
+        maxZoom: 22,
+        attribution: "&copy; OpenStreetMap-bijdragers",
       }
-      if (outers.length > 0) {
-        features.push({
-          type: "Feature",
-          geometry:
-            (outers.length === 1 && inners.length === 0)
-            ? {type: "Polygon", coordinates: [outers[0], ...inners]}
-            : {type: "MultiPolygon", coordinates: outers.map(outer => [outer, ...inners])},
-          properties: {tags: el.tags || {}, id: el.id}
-        });
+    );
+    const luchtfoto = L.tileLayer.wms(
+      "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?",
+      {
+        layers: "Actueel_ortho25",
+        format: "image/jpeg",
+        tilematrixSet: "EPSG:3857",
+        transparent: false,
+        maxZoom: 22,
+        attribution: "Luchtfoto via PDOK",
       }
+    );
+    const minuutplan = L.tileLayer("https://tileserver.huc.knaw.nl/{z}/{x}/{y}", {
+      maxZoom: 22,
+      attribution: "Minuutplan 1832 via Huygens ING",
+    });
+
+    const map = L.map("map", {
+      center: [52.64, 5.775],
+      zoom: 14,
+      minZoom: 2,
+      maxZoom: 22,
+      layers: [luchtfoto],
+    });
+
+    L.control
+      .layers(
+        {
+          OSM: osm,
+          "PDOK Luchtfoto": luchtfoto,
+          "Minuutplan 1832": minuutplan,
+        },
+        null,
+        { collapsed: false }
+      )
+      .addTo(map);
+
+    function tagsTable(tags) {
+      return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${Object.entries(
+        tags
+      )
+        .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
+        .join("")}</tbody></table>`;
     }
-  }
-  console.log(`GeoJSON features gemaakt: ${features.length}`);
-  return {type: "FeatureCollection", features};
-}
 
-function styleFeature(f) {
-  const tags = f.properties.tags || {};
-  if (tags.building) return {color: '#a10000', weight: 2, fillColor: '#ff4444', fillOpacity: 0.4};
-  if (tags['natural'] === 'water') return {color: '#1380ff', weight: 2, fillColor: '#76aaff', fillOpacity: 0.35};
-  if (tags.landuse === 'residential' && !tags.building) return {color: '#888888', weight: 2, fillColor: '#e0e0e0', fillOpacity: 0.2};
-  if (tags.landuse === 'meadow') return {color: '#4caf50', weight: 2, fillColor: '#a5d6a7', fillOpacity: 0.4};
-  if (tags.landuse === 'forrest') return {color: '#004d00', weight: 2, fillColor: '#003300', fillOpacity: 0.6};
-  if (tags.landuse === 'allotments') return {color: '#e6c300', weight: 2, fillColor: '#fff799', fillOpacity: 0.6};
-  if (tags.landuse === 'orchard') return {color: '#d97b00', weight: 2, fillColor: '#ffb74d', fillOpacity: 0.6};
-  if (tags.landuse === 'farmland') return {color: '#4e342e', weight: 2, fillColor: '#3e2723', fillOpacity: 0.6};
-  if (tags.natural === 'sand') return {color: '#d9cbbd', weight: 2, fillColor: '#f4f1e9', fillOpacity: 0.6};
-  return {color: '#000000', weight: 2, fillOpacity: 0.2};
-}
-
-function tagsTable(tags) {
-  const rows = Object.entries(tags).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-  return `<table class="tags"><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-const forestIcon = L.divIcon({
-  className: 'forest-icon',
-  iconSize: [20, 20],
-  interactive: false
-});
-
-let labelMarkers = [];
-
-function clearLabelMarkers() {
-  labelMarkers.forEach(m => map.removeLayer(m));
-  labelMarkers = [];
-}
-
-console.log('Start ophalen data van OSM API...');
-fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
-  headers: {'Accept': 'application/json'}
-})
-.then(resp => {
-  console.log('Response van server ontvangen:', resp);
-  if (!resp.ok) throw new Error('HTTP-fout: ' + resp.status);
-  return resp.json();
-})
-.then(data => {
-  console.log('Data geladen en geparsed:', data);
-  const geojsonData = overpassToGeoJSON(data);
-  const geojsonLayer = L.geoJSON(geojsonData, {
-    style: styleFeature,
-    onEachFeature: (feature, layer) => {
-      console.log('Feature toegevoegd:', feature.properties.id);
-      layer.bindPopup(tagsTable(feature.properties.tags));
-      if (feature.properties.tags.landuse === 'forrest') {
-        const coords = feature.geometry.coordinates[0];
-        let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-        coords.forEach(([x,y]) => {
-          if(x<minX) minX=x; if(x>maxX) maxX=x;
-          if(y<minY) minY=y; if(y>maxY) maxY=y;
-        });
-        const center = [(minY+maxY)/2, (minX+maxX)/2];
-        const marker = L.marker(center, {icon: forestIcon, interactive:false});
-        marker.addTo(map);
-        labelMarkers.push(marker);
-      }
+    function styleFeature(f) {
+      const tags = f.properties.tags || {};
+      if (tags.building)
+        return {
+          color: "#a10000",
+          weight: 2,
+          fillColor: "#ff4444",
+          fillOpacity: 0.4,
+        };
+      if (tags.natural === "water")
+        return {
+          color: "#1380ff",
+          weight: 2,
+          fillColor: "#76aaff",
+          fillOpacity: 0.35,
+        };
+      if (tags.landuse === "residential" && !tags.building)
+        return {
+          color: "#888888",
+          weight: 2,
+          fillColor: "#e0e0e0",
+          fillOpacity: 0.2,
+        };
+      if (tags.landuse === "meadow")
+        return {
+          color: "#4caf50",
+          weight: 2,
+          fillColor: "#a5d6a7",
+          fillOpacity: 0.4,
+        };
+      if (tags.landuse === "forrest")
+        return {
+          color: "#004d00",
+          weight: 2,
+          fillColor: "#003300",
+          fillOpacity: 0.6,
+        };
+      if (tags.landuse === "allotments")
+        return {
+          color: "#e6c300",
+          weight: 2,
+          fillColor: "#fff799",
+          fillOpacity: 0.6,
+        };
+      if (tags.landuse === "orchard")
+        return {
+          color: "#d97b00",
+          weight: 2,
+          fillColor: "#ffb74d",
+          fillOpacity: 0.6,
+        };
+      if (tags.landuse === "farmland")
+        return {
+          color: "#4e342e",
+          weight: 2,
+          fillColor: "#3e2723",
+          fillOpacity: 0.6,
+        };
+      if (tags.natural === "sand")
+        return {
+          color: "#d9cbbd",
+          weight: 2,
+          fillColor: "#f4f1e9",
+          fillOpacity: 0.6,
+        };
+      return { color: "#000000", weight: 2, fillOpacity: 0.2 };
     }
-  }).addTo(map);
 
-  function updateLabels() {
-    console.log('Update labels, zoom:', map.getZoom());
-    clearLabelMarkers();
-    if (map.getZoom() >= 18) {
-      geojsonLayer.eachLayer(layer => {
-        const tags = layer.feature.properties.tags;
-        if (tags['kad:perceelnr']) {
-          const coords = layer.feature.geometry.coordinates[0];
-          let minX=coords[0][0], maxX=coords[0][0], minY=coords[0][1], maxY=coords[0][1];
-          coords.forEach(([x,y]) => {
-            if(x<minX) minX=x; if(x>maxX) maxX=x;
-            if(y<minY) minY=y; if(y>maxY) maxY=y;
-          });
-          const center = [(minY+maxY)/2, (minX+maxX)/2];
-          const marker = L.marker(center, {
-            icon: L.divIcon({
-              className: 'kadastraal-label',
-              iconSize: [60, 20],
-              html: tags['kad:perceelnr']
-            }),
-            interactive: false
-          });
-          marker.addTo(map);
-          labelMarkers.push(marker);
-          console.log('Perceelnummer getoond:', tags['kad:perceelnr']);
+    const forestIcon = L.divIcon({
+      className: "forest-icon",
+      iconSize: [20, 20],
+      interactive: false,
+    });
+
+    let labelMarkers = [];
+
+    function clearLabelMarkers() {
+      labelMarkers.forEach((m) => map.removeLayer(m));
+      labelMarkers = [];
+    }
+
+    // Functie die nodes omzet naar een map van id => { lat, lon }
+    function buildNodesMap(elements) {
+      const nodes = {};
+      elements.forEach((el) => {
+        if (el.type === "node") {
+          nodes[el.id] = { lat: el.lat, lon: el.lon };
         }
       });
+      return nodes;
     }
-  }
 
-  map.on('zoomend', updateLabels);
-  updateLabels();
+    // Functie die van een way de geometry maakt (array van coords) gebaseerd op nodes map
+    function buildWayGeometry(nodesMap, way) {
+      if (!way.nodes) return null;
+      const coords = [];
+      for (const nid of way.nodes) {
+        const node = nodesMap[nid];
+        if (!node) {
+          console.warn("Node niet gevonden voor id:", nid);
+          return null;
+        }
+        coords.push([node.lon, node.lat]);
+      }
+      return coords;
+    }
 
-})
-.catch(err => {
-  console.error('Fout bij laden data:', err);
-  alert('Kan data niet laden: ' + err.message);
-});
+    // Functie voor converteren Overpass JSON naar GeoJSON met multipolygon support
+    function overpassToGeoJSON(data) {
+      console.log("Start convert Overpass JSON to GeoJSON");
 
-</script>
+      const nodesMap = buildNodesMap(data.elements || []);
+      const waysGeo = {};
+
+      // Eerste maak ways geometry
+      (data.elements || []).forEach((el) => {
+        if (el.type === "way") {
+          const geom = buildWayGeometry(nodesMap, el);
+          if (geom) waysGeo[el.id] = geom;
+        }
+      });
+
+      const features = [];
+
+      // Voeg ways als Polygon toe
+      (data.elements || []).forEach((el) => {
+        if (el.type === "way" && waysGeo[el.id]) {
+          features.push({
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [waysGeo[el.id]] },
+            properties: { tags: el.tags || {}, id: el.id },
+          });
+        }
+      });
+
+      // Voeg multipolygon-relaties toe
+      (data.elements || []).forEach((el) => {
+        if (el.type === "relation" && el.tags && el.tags.type === "multipolygon") {
+          let outers = [];
+          let inners = [];
+          if (!el.members) return;
+          el.members.forEach((mem) => {
+            if (mem.type === "way" && waysGeo[mem.ref]) {
+              if (mem.role === "outer") outers.push(waysGeo[mem.ref]);
+              else if (mem.role === "inner") inners.push(waysGeo[mem.ref]);
+            }
+          });
+          if (outers.length) {
+            features.push({
+              type: "Feature",
+              geometry:
+                outers.length === 1 && inners.length === 0
+                  ? { type: "Polygon", coordinates: [outers[0], ...inners] }
+                  : { type: "MultiPolygon", coordinates: outers.map((outer) => [outer, ...inners]) },
+              properties: { tags: el.tags || {}, id: el.id },
+            });
+          }
+        }
+      });
+
+      console.log("GeoJSON features totaal:", features.length);
+      return { type: "FeatureCollection", features };
+    }
+
+    // Laad data van OSM API
+    console.log("Start data ophalen van OSM API...");
+    fetch("https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67", {
+      headers: { Accept: "application/json" },
+    })
+      .then((resp) => {
+        console.log("Response ontvangen:", resp);
+        if (!resp.ok) throw new Error("HTTP error: " + resp.status);
+        return resp.json();
+      })
+      .then((data) => {
+        console.log("Data geladen en geparsed:", data);
+        const geojsonData = overpassToGeoJSON(data);
+
+        const geojsonLayer = L.geoJSON(geojsonData, {
+          style: styleFeature,
+          onEachFeature: (feature, layer) => {
+            console.log("Feature toegevoegd:", feature.properties.id);
+            layer.bindPopup(tagsTable(feature.properties.tags));
+
+            // Bos icoon als landuse=forrest
+            if (feature.properties.tags.landuse === "forrest") {
+              const coords = feature.geometry.coordinates[0];
+              let minX = coords[0][0],
+                maxX = coords[0][0],
+                minY = coords[0][1],
+                maxY = coords[0][1];
+              coords.forEach(([x, y]) => {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              });
+              const center = [(minY + maxY) / 2, (minX + maxX) / 2];
+              const marker = L.marker(center, {
+                icon: forestIcon,
+                interactive: false,
+              });
+              marker.addTo(map);
+              labelMarkers.push(marker);
+            }
+          },
+        }).addTo(map);
+
+        function updateLabels() {
+          console.log("Update labels, zoom:", map.getZoom());
+          clearLabelMarkers();
+          if (map.getZoom() >= 18) {
+            geojsonLayer.eachLayer((layer) => {
+              const tags = layer.feature.properties.tags;
+              if (tags["kad:perceelnr"]) {
+                const coords = layer.feature.geometry.coordinates[0];
+                let minX = coords[0][0],
+                  maxX = coords[0][0],
+                  minY = coords[0][1],
+                  maxY = coords[0][1];
+                coords.forEach(([x, y]) => {
+                  if (x < minX) minX = x;
+                  if (x > maxX) maxX = x;
+                  if (y < minY) minY = y;
+                  if (y > maxY) maxY = y;
+                });
+                const center = [(minY + maxY) / 2, (minX + maxX) / 2];
+                const marker = L.marker(center, {
+                  icon: L.divIcon({
+                    className: "kadastraal-label",
+                    iconSize: [60, 20],
+                    html: tags["kad:perceelnr"],
+                  }),
+                  interactive: false,
+                });
+                marker.addTo(map);
+                labelMarkers.push(marker);
+                console.log("Perceelnummer getoond:", tags["kad:perceelnr"]);
+              }
+            });
+          }
+        }
+
+        map.on("zoomend", updateLabels);
+        updateLabels();
+      })
+      .catch((err) => {
+        console.error("Fout bij laden data:", err);
+        alert("Kan data niet laden: " + err.message);
+      });
+  </script>
 </body>
 </html>
