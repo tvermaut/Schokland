@@ -1,75 +1,154 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="utf-8" />
-<title>OpenLayers HisGIS OSM API Kadaster</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
-<style>
-  html, body, #map {
-    margin: 0; padding: 0; width: 100%; height: 100%;
-  }
-  .ol-popup {
-    position: absolute;
-    background-color: white;
-    padding: 5px 10px;
-    border: 1px solid #ccc;
-    bottom: 12px;
-    left: -50px;
-    min-width: 200px;
-  }
-  .ol-popup:after, .ol-popup:before {
-    top: 100%;
-    border: solid transparent;
-    content: " ";
-    height: 0;
-    width: 0;
-    position: absolute;
-    pointer-events: none;
-  }
-  .ol-popup:after {
-    border-top-color: white;
-    border-width: 10px;
-    left: 48px;
-    margin-left: -10px;
-  }
-  .ol-popup:before {
-    border-top-color: #ccc;
-    border-width: 11px;
-    left: 48px;
-    margin-left: -11px;
-  }
-  .label {
-    background-color: rgba(161, 0, 0, 0.7);
-    color: white;
-    padding: 2px 5px;
-    border-radius: 3px;
-    font-weight: bold;
-    font-size: 12px;
-    white-space: nowrap;
-    pointer-events: none;
-    user-select: none;
-  }
-</style>
+  <meta charset="utf-8" />
+  <title>OpenLayers Kadaster met LayerSwitcher</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.3.0/ol.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol-ext@3.1.21/dist/ol-ext.min.css" />
+  <style>
+    html, body, #map {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+    }
+    .ol-popup {
+      position: absolute;
+      background-color: white;
+      padding: 5px 10px;
+      border: 1px solid #ccc;
+      bottom: 12px;
+      left: -50px;
+      min-width: 200px;
+    }
+    .ol-popup:after, .ol-popup:before {
+      top: 100%;
+      border: solid transparent;
+      content: " ";
+      height: 0;
+      width: 0;
+      position: absolute;
+      pointer-events: none;
+    }
+    .ol-popup:after {
+      border-top-color: white;
+      border-width: 10px;
+      left: 48px;
+      margin-left: -10px;
+    }
+    .ol-popup:before {
+      border-top-color: #ccc;
+      border-width: 11px;
+      left: 48px;
+      margin-left: -11px;
+    }
+    .label {
+      background-color: rgba(161, 0, 0, 0.7);
+      color: white;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-weight: bold;
+      font-size: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="popup" class="ol-popup" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/ol@7.3.0/dist/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ol-ext@3.1.21/dist/ol-ext.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="osmtogeojson.js"></script>
 
 <script>
+  // Kaart initialiseren met baselayers en overlaygroup
+  const osmLayer = new ol.layer.Tile({
+    source: new ol.source.OSM(),
+    visible: true,
+    title: 'OSM',
+    type: 'base'
+  });
+  const luchtfotoLayer = new ol.layer.Tile({
+    source: new ol.source.TileWMS({
+      url: 'https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0?',
+      params: {LAYERS:'Actueel_ortho25', FORMAT:'image/jpeg'},
+      serverType: 'geoserver'
+    }),
+    visible: false,
+    title: 'PDOK Luchtfoto',
+    type: 'base'
+  });
+  const minuutplanLayer = new ol.layer.Tile({
+    source: new ol.source.XYZ({url:'https://tileserver.huc.knaw.nl/{z}/{x}/{y}'}),
+    visible: false,
+    title: 'Minuutplan 1832',
+    type: 'base'
+  });
+
+  // Vector source en layer voor percelen
+  const vectorSource = new ol.source.Vector();
+  const vectorLayer = new ol.layer.Vector({
+    source: vectorSource,
+    title: 'Percelen',
+    style: feature => {
+      const tags = feature.get('tags') || {};
+      if(tags.building) {
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(255,68,68,0.4)'}),
+          stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
+          text: new ol.style.Text({
+            font: 'bold 14px Calibri,sans-serif',
+            text: map.getView().getZoom() >= 18 ? buildLabelText(feature) : '',
+            fill: new ol.style.Fill({color: '#a10000'}),
+            stroke: new ol.style.Stroke({color: 'white', width: 3}),
+            overflow: true
+          })
+        });
+      }
+      if(tags.natural==='water'){
+        return new ol.style.Style({
+          fill: new ol.style.Fill({color: 'rgba(118,169,255,0.35)'}),
+          stroke: new ol.style.Stroke({color: '#1380ff', width: 2})
+        });
+      }
+      // Default
+      return new ol.style.Style({
+        fill: new ol.style.Fill({color: 'rgba(255,255,255,0.4)'}),
+        stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
+        text: new ol.style.Text({
+          font: 'bold 14px Calibri,sans-serif',
+          text: map.getView().getZoom() >= 18 ? buildLabelText(feature) : '',
+          fill: new ol.style.Fill({color: '#a10000'}),
+          stroke: new ol.style.Stroke({color: 'white', width: 3}),
+          overflow: true
+        })
+      });
+    }
+  });
+
   const map = new ol.Map({
     target: 'map',
-    layers: [new ol.layer.Tile({ source: new ol.source.OSM() })],
+    layers: [osmLayer, luchtfotoLayer, minuutplanLayer, vectorLayer],
     view: new ol.View({
       center: ol.proj.fromLonLat([5.775, 52.64]),
-      zoom: 14
+      zoom: 14,
+      minZoom: 2,
+      maxZoom: 22
     })
   });
 
+  // LayerSwitcher
+  const layerSwitcher = new ol.control.LayerSwitcher({
+    activationMode: 'click',
+    startActive: false,
+    tipLabel: 'Kaartlagen',
+    groupSelectStyle: 'group'
+  });
+  map.addControl(layerSwitcher);
+
+  // Popup setup
   const popupContainer = document.getElementById('popup');
   const popupOverlay = new ol.Overlay({
     element: popupContainer,
@@ -79,126 +158,58 @@
   });
   map.addOverlay(popupOverlay);
 
-  function tagsTable(tags) {
-    if(!tags) return '';
-    let html = '<table><thead><tr><th>tag</th><th>waarde</th></tr></thead><tbody>';
-    for(const [k,v] of Object.entries(tags)) {
-      html += `<tr><td>${k}</td><td>${v}</td></tr>`;
-    }
-    html += '</tbody></table>';
-    return html;
-  }
-
-  function styleFeature(feature) {
+  function buildLabelText(feature){
     const tags = feature.get('tags') || {};
-    const fillColor = tags.building ? 'rgba(255, 68, 68, 0.4)' :
-                      tags['natural'] === 'water' ? 'rgba(118,169,255,0.35)' :
-                      'rgba(255,255,255,0.4)';
-    return new ol.style.Style({
-      fill: new ol.style.Fill({color: fillColor}),
-      stroke: new ol.style.Stroke({color: '#a10000', width: 2}),
-      text: new ol.style.Text({
-        font: 'bold 14px Calibri,sans-serif',
-        text: map.getView().getZoom() >= 18 ? buildLabelText(feature) : '',
-        fill: new ol.style.Fill({color: '#a10000'}),
-        stroke: new ol.style.Stroke({color: 'white', width: 3}),
-        overflow: true
-      })
-    });
-  }
-
-  function buildLabelText(feature) {
-    const tags = feature.get('tags') || {};
-    let text = tags['kad:perceelnr'] || '';
-    if(tags['kad:perceelnrtvg']) {
-      text += '/' + tags['kad:perceelnrtvg'];
+    let label = tags['kad:perceelnr'] || '';
+    if(tags['kad:perceelnrtvg']){
+      label += '/' + tags['kad:perceelnrtvg'];
     }
-    return text;
+    return label;
   }
 
-  let vectorSource = new ol.source.Vector();
-  let vectorLayer = new ol.layer.Vector({
-    source: vectorSource,
-    style: styleFeature
-  });
-  map.addLayer(vectorLayer);
-
-  let labelOverlays = [];
-  function clearLabels() {
-    labelOverlays.forEach(overlay => map.removeOverlay(overlay));
-    labelOverlays = [];
-  }
-  function updateLabels() {
-    clearLabels();
-    if(map.getView().getZoom() < 18) return;
-    vectorSource.getFeatures().forEach(feature => {
-      const labelText = buildLabelText(feature);
-      if(!labelText) return;
-      const center = ol.extent.getCenter(feature.getGeometry().getExtent());
-      const labelOverlay = new ol.Overlay({
-        element: createLabelElement(labelText),
-        position: center,
-        stopEvent: false,
-        offset: [0, -15]
-      });
-      map.addOverlay(labelOverlay);
-      labelOverlays.push(labelOverlay);
-    });
-  }
-  function createLabelElement(text) {
-    const d = document.createElement('div');
-    d.className = 'label';
-    d.textContent = text;
-    return d;
-  }
-
-  map.on('singleclick', function(evt) {
+  map.on('singleclick', e => {
     popupOverlay.setPosition(undefined);
-    popupContainer.style.display='none';
+    popupContainer.style.display = 'none';
 
-    let clickedFeatures = [];
-    map.forEachFeatureAtPixel(evt.pixel, feature => {
-      clickedFeatures.push(feature);
-    });
+    const clickedFeatures = [];
+    map.forEachFeatureAtPixel(e.pixel, feature => clickedFeatures.push(feature));
 
     if(clickedFeatures.length === 0) return;
 
-    for(let feat of clickedFeatures) {
+    for(let feat of clickedFeatures){
       const geom = feat.getGeometry();
-      const coords = geom.clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
+      const geoCoords = geom.clone().transform('EPSG:3857','EPSG:4326').getCoordinates();
       let turfGeom = null;
-      if(geom.getType() === 'Polygon') {
-        turfGeom = turf.polygon(coords);
-      } else if(geom.getType() === 'MultiPolygon') {
-        turfGeom = turf.multiPolygon(coords);
+      if(geom.getType() === 'Polygon'){
+        turfGeom = turf.polygon(geoCoords);
       }
-      if(turfGeom) {
-        const clickPoint = turf.point(ol.proj.toLonLat(evt.coordinate));
+      else if(geom.getType() === 'MultiPolygon'){
+        turfGeom = turf.multiPolygon(geoCoords);
+      }
+      if(turfGeom){
+        const clickPoint = turf.point(ol.proj.toLonLat(e.coordinate));
         let insideHole = false;
-        for(let i = 1; i < turfGeom.geometry.coordinates.length; i++) {
-          const hole = turf.polygon([turfGeom.geometry.coordinates[i]]);
-          if(turf.booleanPointInPolygon(clickPoint, hole)) {
+        for(let i=1; i<turfGeom.geometry.coordinates.length; i++){
+          let holePoly = turf.polygon([turfGeom.geometry.coordinates[i]]);
+          if(turf.booleanPointInPolygon(clickPoint, holePoly)){
             insideHole = true;
-            console.log("Klik binnen hole, negeer popup");
             break;
           }
         }
-        if(insideHole) continue;
+        if(insideHole) continue; // negeer klik in hole
       }
-      const tags = feat.get('tags') || {};
-      if(Object.keys(tags).length > 0){
-        popupContainer.innerHTML = tagsTable(tags);
-        popupOverlay.setPosition(evt.coordinate);
-        popupContainer.style.display = 'block';
-        console.log('Popup getoond voor feature', tags);
-        return;
-      }
-    }
-  })
 
-  // Gebruik de door jou gegeven API URL met bbox
-  fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67', {
-    headers: {'Accept': 'application/json'}
+      // Anders popup tonen
+      const tags = feat.get('tags')||{};
+      popupContainer.innerHTML = tagsTable(tags);
+      popupOverlay.setPosition(e.coordinate);
+      popupContainer.style.display = 'block';
+      return;
+    }
+  });
+
+  fetch('https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67',{
+    headers:{'Accept':'application/json'}
   })
   .then(resp => resp.json())
   .then(osmJson => {
@@ -210,11 +221,9 @@
     });
     vectorSource.clear();
     vectorSource.addFeatures(features);
-    updateLabels();
-    map.getView().on('change:resolution', updateLabels);
   })
-  .catch(e => {
-    console.error("Fout bij laden data:", e);
+  .catch(e=>{
+    console.error('Fout bij laden data:', e);
   });
 </script>
 </body>
