@@ -1,48 +1,35 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="utf-8" />
-  <title>Schokland</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    html, body {
-      height: 100%; margin: 0; padding: 0;
-    }
-    #map {
-      height: 100vh; width: 100vw;
-    }
-    .leaflet-container {
-      background: #ddd;
-    }
-    .kadastraal-label {
-      font-weight: bold;
-      color: #a10000;
-      text-align: center;
-      font-size: 14px;
-      text-shadow: 1px 1px 3px white, -1px -1px 3px white;
-      pointer-events: none;
-    }
-    table.tags {
-      border-collapse: collapse;
-      width: 100%;
-    }
-    table.tags td, table.tags th {
-      border: 1px solid #ccc;
-      padding: 4px 8px;
-      text-align: left;
-      background: #faf9fa;
-    }
-    table.tags th {
-      background: #edecfe;
-    }
-    .forest-icon {
-      width: 20px; height: 20px;
-      background: url('https://cdn-icons-png.flaticon.com/512/4205/4205032.png') no-repeat center center;
-      background-size: contain;
-      pointer-events: none;
-    }
-  </style>
+<meta charset="utf-8" />
+<title>Schokland</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; }
+  #map { height: 100vh; width: 100vw; }
+  .leaflet-container { background: #ddd; }
+  .kadastraal-label {
+    font-weight: bold; color: #a10000;
+    text-align: center; font-size: 14px;
+    text-shadow: 1px 1px 3px white, -1px -1px 3px white;
+    pointer-events: none;
+  }
+  table.tags {
+    border-collapse: collapse; width: 100%;
+  }
+  table.tags td, table.tags th {
+    border: 1px solid #ccc; padding: 4px 8px;
+    text-align: left; background: #faf9fa;
+  }
+  table.tags th { background: #edecfe; }
+  .forest-icon {
+    width: 20px; height: 20px;
+    background: url('https://cdn-icons-png.flaticon.com/512/4205/4205032.png')
+      no-repeat center center;
+    background-size: contain; pointer-events: none;
+  }
+</style>
 </head>
 <body>
 <div id="map"></div>
@@ -171,7 +158,7 @@
         features.push({
           type: 'Feature',
           geometry: outers.length === 1 && inners.length === 0 ?
-            {type:'Polygon', coordinates: [outers[0]]} : // inner rings niet meenemen ivm rand-teken issue
+            {type:'Polygon', coordinates: [outers[0]]} :
             {type:'MultiPolygon', coordinates: outers.map(outer => [outer])},
           properties: {tags: el.tags || {}, id: el.id}
         });
@@ -191,10 +178,13 @@
     clearLabelMarkers();
     if (map.getZoom() < 18) return;
     geojsonLayer.eachLayer(layer => {
-      if(!layer || !layer.feature || !layer.feature.properties) return;
+      if(!layer || !layer.feature || !layer.feature.properties){
+        console.log("updateLabels: geen feature of properties, layer type:", layer ? layer.constructor.name : 'undefined');
+        return;
+      }
       const tags = layer.feature.properties.tags || {};
       if(tags['kad:perceelnr']){
-        console.log('Toon label voor perceel:', tags['kad:perceelnr']);
+        console.log('updateLabels: label voor perceel', tags['kad:perceelnr']);
         let coords = [];
         if(layer.feature.geometry.type === 'Polygon'){
           coords = layer.feature.geometry.coordinates[0];
@@ -228,12 +218,20 @@
   }
 
   function tagsPopup(layer) {
-    if(!layer || !layer.feature || !layer.feature.properties) {
-      console.log('Geen feature of properties bij layer:', layer);
+    if(!layer){
+      console.log('tagsPopup: layer is null of undefined');
+      return;
+    }
+    if(!layer.feature){
+      console.log('tagsPopup: geen feature, layer type:', layer.constructor.name);
+      return;
+    }
+    if(!layer.feature.properties){
+      console.log('tagsPopup: feature zonder properties, layer type:', layer.constructor.name);
       return;
     }
     const tags = layer.feature.properties.tags || {};
-    console.log('Popup aan feature met id', layer.feature.properties.id, 'tags:', tags);
+    console.log('tagsPopup: popup aan feature id', layer.feature.properties.id, 'tags:', tags);
     layer.bindPopup(tagsTable(tags));
   }
 
