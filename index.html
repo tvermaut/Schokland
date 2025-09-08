@@ -192,7 +192,6 @@
       labelMarkers = [];
     }
 
-    // Functie die nodes omzet naar een map van id => { lat, lon }
     function buildNodesMap(elements) {
       const nodes = {};
       elements.forEach((el) => {
@@ -203,7 +202,6 @@
       return nodes;
     }
 
-    // Functie die van een way de geometry maakt (array van coords) gebaseerd op nodes map
     function buildWayGeometry(nodesMap, way) {
       if (!way.nodes) return null;
       const coords = [];
@@ -218,14 +216,12 @@
       return coords;
     }
 
-    // Functie voor converteren Overpass JSON naar GeoJSON met multipolygon support
     function overpassToGeoJSON(data) {
       console.log("Start convert Overpass JSON to GeoJSON");
 
       const nodesMap = buildNodesMap(data.elements || []);
       const waysGeo = {};
 
-      // Eerste maak ways geometry
       (data.elements || []).forEach((el) => {
         if (el.type === "way") {
           const geom = buildWayGeometry(nodesMap, el);
@@ -235,20 +231,46 @@
 
       const features = [];
 
-      // Voeg ways als Polygon toe
       (data.elements || []).forEach((el) => {
         if (el.type === "way" && waysGeo[el.id]) {
-          features.push({
-            type: "Feature",
-            geometry: { type: "Polygon", coordinates: [waysGeo[el.id]] },
-            properties: { tags: el.tags || {}, id: el.id },
-          });
+          const coords = waysGeo[el.id];
+          const first = coords[0];
+          const last = coords[coords.length - 1];
+          const isClosed = first[0] === last[0] && first[1] === last[1];
+
+          let geometry = null;
+          if (el.tags && el.tags["man_made"] === "groyne") {
+            geometry = {
+              type: "LineString",
+              coordinates: coords,
+            };
+          } else if (isClosed) {
+            geometry = {
+              type: "Polygon",
+              coordinates: [coords],
+            };
+          } else {
+            geometry = {
+              type: "LineString",
+              coordinates: coords,
+            };
+          }
+          if (geometry) {
+            features.push({
+              type: "Feature",
+              geometry,
+              properties: { tags: el.tags || {}, id: el.id },
+            });
+          }
         }
       });
 
-      // Voeg multipolygon-relaties toe
       (data.elements || []).forEach((el) => {
-        if (el.type === "relation" && el.tags && el.tags.type === "multipolygon") {
+        if (
+          el.type === "relation" &&
+          el.tags &&
+          el.tags.type === "multipolygon"
+        ) {
           let outers = [];
           let inners = [];
           if (!el.members) return;
@@ -264,7 +286,10 @@
               geometry:
                 outers.length === 1 && inners.length === 0
                   ? { type: "Polygon", coordinates: [outers[0], ...inners] }
-                  : { type: "MultiPolygon", coordinates: outers.map((outer) => [outer, ...inners]) },
+                  : {
+                      type: "MultiPolygon",
+                      coordinates: outers.map((outer) => [outer, ...inners]),
+                    },
               properties: { tags: el.tags || {}, id: el.id },
             });
           }
@@ -275,14 +300,13 @@
       return { type: "FeatureCollection", features };
     }
 
-    // Laad data van OSM API
     console.log("Start data ophalen van OSM API...");
     fetch("https://osm.hisgis.nl/api/0.6/map?bbox=5.76,52.61,5.79,52.67", {
       headers: { Accept: "application/json" },
     })
       .then((resp) => {
         console.log("Response ontvangen:", resp);
-        if (!resp.ok) throw new Error("HTTP error: " + resp.status);
+        if (!resp.ok) throw new Error("HTTP-fout: " + resp.status);
         return resp.json();
       })
       .then((data) => {
@@ -295,7 +319,6 @@
             console.log("Feature toegevoegd:", feature.properties.id);
             layer.bindPopup(tagsTable(feature.properties.tags));
 
-            // Bos icoon als landuse=forrest
             if (feature.properties.tags.landuse === "forrest") {
               const coords = feature.geometry.coordinates[0];
               let minX = coords[0][0],
